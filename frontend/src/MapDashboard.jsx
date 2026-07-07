@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { MapContainer, TileLayer, CircleMarker, Marker, Popup, useMap } from "react-leaflet";
-import { RefreshCw, Zap, User, Building2, CheckCircle2 } from "lucide-react";
+import { RefreshCw, Zap, User, Building2, CheckCircle2, Menu, X } from "lucide-react";
 import L from "leaflet";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
@@ -66,6 +66,7 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident }) {
   // Sidebar collapsible state
   const [activeOpen, setActiveOpen] = useState(true);
   const [resolvedOpen, setResolvedOpen] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   // Click-to-recenter: flyTarget changes trigger MapController
   const [flyTarget, setFlyTarget] = useState(null);
@@ -131,6 +132,7 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident }) {
       setActiveOpen(true);
     }
     setFlyTarget({ incident, key: Date.now() }); // new key forces effect to re-run even for same incident
+    setMobileSidebarOpen(false); // Close sidebar on mobile when an incident is selected to view it
   }
 
   // Handle focusing on a specific incident when selected externally (e.g. from submissions page)
@@ -148,12 +150,30 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident }) {
 
   return (
     <div className="map-layout">
+      {/* ── Mobile Sidebar Toggle ── */}
+      <button 
+        className="mobile-sidebar-toggle" 
+        onClick={() => setMobileSidebarOpen(true)}
+      >
+        <Menu size={24} />
+      </button>
+
+      {/* ── Sidebar Overlay (Mobile) ── */}
+      <div 
+        className={`mobile-sidebar-overlay ${mobileSidebarOpen ? "mobile-open" : ""}`} 
+        onClick={() => setMobileSidebarOpen(false)} 
+      />
 
       {/* ── Sidebar ── */}
-      <aside className="map-sidebar">
-        <div className="sidebar-header">
-          <div className="sidebar-title">Live Incident Map</div>
-          <div className="sidebar-subtitle">Hyderabad metropolitan area</div>
+      <aside className={`map-sidebar ${mobileSidebarOpen ? "mobile-open" : ""}`}>
+        <div className="sidebar-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <div className="sidebar-title">Live Incident Map</div>
+            <div className="sidebar-subtitle">Hyderabad metropolitan area</div>
+          </div>
+          <button className="sidebar-close-btn" onClick={() => setMobileSidebarOpen(false)}>
+            <X size={20} />
+          </button>
         </div>
 
         <div className="sidebar-top-bar">
