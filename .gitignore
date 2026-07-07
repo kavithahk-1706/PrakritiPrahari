@@ -5,6 +5,7 @@ __pycache__
 firebase_acc_path.json
 test_files/
 postman/
+.postman/
 
 # node (frontend)
 node_modules

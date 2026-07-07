@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { MapContainer, TileLayer, CircleMarker, Marker, Popup } from "react-leaflet";
+import { useEffect, useRef, useState } from "react";
+import { MapContainer, TileLayer, CircleMarker, Marker, Popup, useMap } from "react-leaflet";
+import { RefreshCw, Zap, User, Building2, CheckCircle2 } from "lucide-react";
 import L from "leaflet";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
@@ -34,11 +35,41 @@ const resolvedIcon = L.divIcon({
 
 const HYDERABAD_CENTER = [17.385, 78.4867]; // fallback map center if no incidents yet
 
-function MapDashboard() {
+/* ── MapController: uses useMap() inside MapContainer to fly to selected incident ── */
+function MapController({ flyTarget, markerRefs }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!flyTarget) return;
+    const { incident } = flyTarget;
+    map.flyTo(
+      [incident.location.lat, incident.location.lng],
+      15,
+      { animate: true, duration: 0.8 }
+    );
+    // Open the popup after the fly animation completes
+    setTimeout(() => {
+      const marker = markerRefs.current[incident.incident_id];
+      if (marker) marker.openPopup();
+    }, 850);
+  }, [flyTarget, map]); // markerRefs.current is mutable — not reactive
+
+  return null;
+}
+
+function MapDashboard({ focusedIncidentId, onClearFocusIncident }) {
   const [incidents, setIncidents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [resolvingId, setResolvingId] = useState(null); // incident_id currently being resolved, for button disabling
+  const [resolvingId, setResolvingId] = useState(null);
+
+  // Sidebar collapsible state
+  const [activeOpen, setActiveOpen] = useState(true);
+  const [resolvedOpen, setResolvedOpen] = useState(false);
+
+  // Click-to-recenter: flyTarget changes trigger MapController
+  const [flyTarget, setFlyTarget] = useState(null);
+  const markerRefs = useRef({});
 
   async function fetchIncidents() {
     setLoading(true);
@@ -89,100 +120,266 @@ function MapDashboard() {
       ? [incidents[0].location.lat, incidents[0].location.lng]
       : HYDERABAD_CENTER;
 
+  const activeIncidents   = incidents.filter((i) => i.status !== "RESOLVED");
+  const resolvedIncidents = incidents.filter((i) => i.status === "RESOLVED");
+
+  // Trigger a fly + popup open from the sidebar list
+  function handleSelectIncident(incident) {
+    if (incident.status === "RESOLVED") {
+      setResolvedOpen(true);
+    } else {
+      setActiveOpen(true);
+    }
+    setFlyTarget({ incident, key: Date.now() }); // new key forces effect to re-run even for same incident
+  }
+
+  // Handle focusing on a specific incident when selected externally (e.g. from submissions page)
+  useEffect(() => {
+    if (focusedIncidentId && incidents.length > 0) {
+      const target = incidents.find((i) => i.incident_id === focusedIncidentId);
+      if (target) {
+        handleSelectIncident(target);
+      }
+      if (onClearFocusIncident) {
+        onClearFocusIncident();
+      }
+    }
+  }, [focusedIncidentId, incidents]);
+
   return (
-    <div className="map-wrapper">
-      <button className="map-refresh-btn" onClick={fetchIncidents}>
-        {loading ? "Loading..." : "Refresh"}
-      </button>
+    <div className="map-layout">
 
-      {error && (
-        <div className="status-banner error" style={{ position: "absolute", top: 60, right: 16, zIndex: 1000, maxWidth: 280 }}>
-          {error}
+      {/* ── Sidebar ── */}
+      <aside className="map-sidebar">
+        <div className="sidebar-header">
+          <div className="sidebar-title">Live Incident Map</div>
+          <div className="sidebar-subtitle">Hyderabad metropolitan area</div>
         </div>
-      )}
 
-      <MapContainer center={mapCenter} zoom={12} scrollWheelZoom={true}>
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; OpenStreetMap contributors'
-        />
-        {incidents.map((incident) =>
-          incident.status === "RESOLVED" ? (
-            <Marker
-              key={incident.incident_id}
-              position={[incident.location.lat, incident.location.lng]}
-              icon={resolvedIcon}
-            >
-              <Popup>
-                <div className="popup-content">
-                  <span className="popup-severity" style={{ background: RESOLVED_GREEN }}>
-                    Resolved
-                  </span>
-                  <div className="popup-title">{incident.pollutant_type}</div>
-                  <div className="popup-summary">{incident.summary}</div>
-                  <div className="popup-action">Resolved by {incident.resolved_by}</div>
-                </div>
-              </Popup>
-            </Marker>
-          ) : (
-            <CircleMarker
-              key={incident.incident_id}
-              center={[incident.location.lat, incident.location.lng]}
-              radius={10}
-              pathOptions={{
-                color: SEVERITY_COLORS[incident.severity_score] || "#888",
-                fillColor: SEVERITY_COLORS[incident.severity_score] || "#888",
-                fillOpacity: 0.85,
-                weight: 2,
-              }}
-            >
-              <Popup>
-                <div className="popup-content">
-                  <span
-                    className="popup-severity"
-                    style={{ background: SEVERITY_COLORS[incident.severity_score] || "#888" }}
-                  >
-                    Severity {incident.severity_score}/5
-                  </span>
-                  <div className="popup-title">{incident.pollutant_type}</div>
-                  <div className="popup-summary">{incident.summary}</div>
-                  <div className="popup-action">{incident.recommended_action}</div>
-
-                  <div className="popup-resolve-row">
-                    <button
-                      className="popup-resolve-btn citizen"
-                      disabled={resolvingId === incident.incident_id}
-                      onClick={() => resolveIncident(incident.incident_id, "CITIZEN")}
-                    >
-                      Resolved by Citizen
-                    </button>
-                    <button
-                      className="popup-resolve-btn authority"
-                      disabled={resolvingId === incident.incident_id}
-                      onClick={() => resolveIncident(incident.incident_id, "AUTHORITY")}
-                    >
-                      Resolved by Authority
-                    </button>
-                  </div>
-                </div>
-              </Popup>
-            </CircleMarker>
-          )
-        )}
-      </MapContainer>
-
-      <div className="legend">
-        <div className="legend-title">Severity</div>
-        {[1, 2, 3, 4, 5].map((level) => (
-          <div className="legend-row" key={level}>
-            <span className="legend-dot" style={{ background: SEVERITY_COLORS[level] }} />
-            {level}
+        <div className="sidebar-top-bar">
+          <button
+            className="refresh-btn"
+            onClick={fetchIncidents}
+            disabled={loading}
+          >
+            <RefreshCw size={12} className="refresh-icon" />
+            {loading ? "Loading…" : "Refresh"}
+          </button>
+          <div className="incident-stats">
+            <strong>{activeIncidents.length}</strong> active &middot; <strong>{resolvedIncidents.length}</strong> resolved
           </div>
-        ))}
-        <div className="legend-row" style={{ marginTop: 6, borderTop: "1px solid var(--border)", paddingTop: 6 }}>
-          <span className="legend-dot" style={{ background: RESOLVED_GREEN }} />
-          Resolved
         </div>
+
+        {error && <div className="map-error">{error}</div>}
+
+        {/* Scrollable incident list */}
+        <div className="incident-list-container">
+
+          {/* Active incidents — collapsible */}
+          <div className="collapsible-section">
+            <button
+              className="collapsible-header"
+              onClick={() => setActiveOpen((o) => !o)}
+            >
+              <div className="collapsible-header-left">
+                Active
+                <span className={`collapsible-count ${activeIncidents.length > 0 ? "has-items" : ""}`}>
+                  {activeIncidents.length}
+                </span>
+              </div>
+              <span className={`collapsible-chevron ${activeOpen ? "open" : ""}`}>▼</span>
+            </button>
+            <div className={`collapsible-body ${activeOpen ? "open" : ""}`}>
+              {activeIncidents.length === 0 ? (
+                <div className="incident-empty">No active incidents</div>
+              ) : (
+                activeIncidents.map((incident) => (
+                  <button
+                    key={incident.incident_id}
+                    className="incident-item"
+                    onClick={() => handleSelectIncident(incident)}
+                  >
+                    <span
+                      className="incident-sev-dot"
+                      style={{ background: SEVERITY_COLORS[incident.severity_score] || "#888" }}
+                    />
+                    <div className="incident-item-content">
+                      <div className="incident-item-type">
+                        Sev {incident.severity_score} · {incident.pollutant_type}
+                      </div>
+                      <div className="incident-item-summary">{incident.summary}</div>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Resolved incidents — collapsible, collapsed by default */}
+          <div className="collapsible-section">
+            <button
+              className="collapsible-header"
+              onClick={() => setResolvedOpen((o) => !o)}
+            >
+              <div className="collapsible-header-left">
+                Resolved
+                <span className="collapsible-count">{resolvedIncidents.length}</span>
+              </div>
+              <span className={`collapsible-chevron ${resolvedOpen ? "open" : ""}`}>▼</span>
+            </button>
+            <div className={`collapsible-body ${resolvedOpen ? "open" : ""}`}>
+              {resolvedIncidents.length === 0 ? (
+                <div className="incident-empty">No resolved incidents</div>
+              ) : (
+                resolvedIncidents.map((incident) => (
+                  <button
+                    key={incident.incident_id}
+                    className="incident-item"
+                    onClick={() => handleSelectIncident(incident)}
+                  >
+                    <span className="incident-sev-dot" style={{ background: RESOLVED_GREEN }} />
+                    <div className="incident-item-content">
+                      <div className="incident-item-type">{incident.pollutant_type}</div>
+                      <div className="incident-item-summary">{incident.summary}</div>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+
+        </div>
+
+        {/* Legend — pinned at bottom */}
+        <div className="map-legend">
+          <div className="legend-label">Severity Scale</div>
+          <div className="legend-items">
+            {[1, 2, 3, 4, 5].map((level) => (
+              <div className="legend-item" key={level}>
+                <span className="legend-swatch" style={{ background: SEVERITY_COLORS[level] }} />
+                Level {level}
+                {level === 1 && " — Minimal"}
+                {level === 3 && " — Moderate"}
+                {level === 5 && " — Critical"}
+              </div>
+            ))}
+            <div className="legend-item" style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--border-subtle)" }}>
+              <span className="legend-swatch" style={{ background: RESOLVED_GREEN }} />
+              Resolved
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      {/* ── Map ── */}
+      <div className="map-area">
+        <MapContainer
+          center={mapCenter}
+          zoom={12}
+          scrollWheelZoom={true}
+          style={{ height: "100%", width: "100%" }}
+        >
+          {/* MapController lives inside MapContainer so it can use useMap() */}
+          <MapController flyTarget={flyTarget} markerRefs={markerRefs} />
+
+          <TileLayer
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution="&copy; OpenStreetMap contributors"
+          />
+
+          {incidents.map((incident) =>
+            incident.status === "RESOLVED" ? (
+              <Marker
+                key={incident.incident_id}
+                position={[incident.location.lat, incident.location.lng]}
+                icon={resolvedIcon}
+                ref={(ref) => {
+                  if (ref) markerRefs.current[incident.incident_id] = ref;
+                  else delete markerRefs.current[incident.incident_id];
+                }}
+              >
+                <Popup>
+                  <div className="popup-card">
+                    <div className="popup-top">
+                      <div className="popup-badge-row">
+                        <span className="popup-badge" style={{ background: RESOLVED_GREEN }}>
+                          Resolved
+                        </span>
+                        <span className="popup-pollutant">{incident.pollutant_type}</span>
+                      </div>
+                      <h3 className="popup-heading">{incident.summary}</h3>
+                    </div>
+                    <div className="popup-mid">
+                      <div className="popup-resolved-by" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <CheckCircle2 size={13} color={RESOLVED_GREEN} />
+                        Resolved by {incident.resolved_by}
+                      </div>
+                    </div>
+                  </div>
+                </Popup>
+              </Marker>
+            ) : (
+              <CircleMarker
+                key={incident.incident_id}
+                center={[incident.location.lat, incident.location.lng]}
+                radius={10}
+                pathOptions={{
+                  color: SEVERITY_COLORS[incident.severity_score] || "#888",
+                  fillColor: SEVERITY_COLORS[incident.severity_score] || "#888",
+                  fillOpacity: 0.85,
+                  weight: 2,
+                }}
+                ref={(ref) => {
+                  if (ref) markerRefs.current[incident.incident_id] = ref;
+                  else delete markerRefs.current[incident.incident_id];
+                }}
+              >
+                <Popup>
+                  <div className="popup-card">
+                    <div className="popup-top">
+                      <div className="popup-badge-row">
+                        <span
+                          className="popup-badge"
+                          style={{ background: SEVERITY_COLORS[incident.severity_score] || "#888" }}
+                        >
+                          Sev {incident.severity_score}
+                        </span>
+                        <span className="popup-pollutant">{incident.pollutant_type}</span>
+                      </div>
+                      <h3 className="popup-heading">{incident.summary}</h3>
+                    </div>
+
+                    <div className="popup-mid">
+                      <div className="popup-action-row">
+                        <Zap size={13} className="popup-action-icon" color="var(--amber-400)" />
+                        <span className="popup-action-text">{incident.recommended_action}</span>
+                      </div>
+                    </div>
+
+                    <div className="popup-bottom">
+                      <button
+                        className="resolve-btn citizen"
+                        disabled={resolvingId === incident.incident_id}
+                        onClick={() => resolveIncident(incident.incident_id, "CITIZEN")}
+                      >
+                        <User size={11} />
+                        Citizen
+                      </button>
+                      <button
+                        className="resolve-btn authority"
+                        disabled={resolvingId === incident.incident_id}
+                        onClick={() => resolveIncident(incident.incident_id, "AUTHORITY")}
+                      >
+                        <Building2 size={11} />
+                        Authority
+                      </button>
+                    </div>
+                  </div>
+                </Popup>
+              </CircleMarker>
+            )
+          )}
+        </MapContainer>
       </div>
     </div>
   );
