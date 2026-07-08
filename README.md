@@ -4,9 +4,9 @@
 
 City-wide AQI apps report averages. They miss the garbage-dump fire two streets from your house, the construction dust choking one intersection, the smoke pocket no municipal sensor is anywhere near. PrakritiPrahari lets any citizen report a hyperlocal pollution incident — in any combination of text, photo, audio, or video, in any of 11 Indian languages — and have it classified, mapped, cross-verified against real CPCB government sensor data, and routed to authorities in seconds using Gemini.
 
-**🔗 Live app:** `https://prakriti-prahari.vercel.app/`
+**🔗 Live app:** `<PASTE VERCEL FRONTEND URL HERE>`
 **🔗 API:** `<PASTE RENDER BACKEND URL HERE>`
-**🎥 Demo video:** `https://prakritiprahari.onrender.com/`
+**🎥 Demo video:** `https://youtu.be/twBbWo7SKdI`
 
 ---
 
@@ -31,6 +31,15 @@ City-wide AQI apps report averages. They miss the garbage-dump fire two streets 
 | Reference sensor data | **OpenAQ v3** (CPCB government stations, point+radius geospatial query, `X-API-Key` auth) |
 | Geocoding | OpenStreetMap Nominatim (reverse geocode + address search) |
 | Map tiles | OpenStreetMap |
+
+## Testing the Authority Flow
+
+A pre-configured authority account is available for judges/testers to try the resolve flow (authority-only resolve access, mandatory resolution note):
+
+Email:    authority-test@prakritiprahari.com
+Password: mgmVLLvgsNPL0409
+
+Log in via the authority login screen on the deployed frontend to access the resolve dashboard.
 
 ## Data model (Firestore `incidents` collection)
 
@@ -134,11 +143,11 @@ npm run dev
 
 - **Cloudinary** — permanent storage and CDN delivery for uploaded photo/audio/video evidence attached to each report.
 
-## Honest scope notes (for judges)
-- Cross-verification currently checks **PM2.5/PM10 only**. Gas pollutants (NO2/CO) report in `ppb` on currently-live OpenAQ sensors and require molecular-weight/pressure-dependent unit conversion to compare against `µg/m³` thresholds — planned as a next-scope improvement, not included in this pass.
-- Confidence-score deltas (e.g. +80 for corroboration, 35 baseline) are a simple heuristic, not a calibrated statistical model. Future work could calibrate these against labeled ground truth.
-- Citizen identity is anonymous, tied to browser + device (Firebase anonymous auth). Clearing browser data or switching devices generates a new UID. Account linking for cross-device persistence is a natural next step, correctly out of scope for this build.
-- Full role-based auth, jurisdiction-based routing, community points, and sub-categorized authority types were deliberately scoped out given the timeline — see Project Write-up for rationale on each.
+## Future scope & technical roadmap
+- **Full gas pollutant coverage (NO2, CO, O3).** Cross-verification currently runs on PM2.5/PM10, since these come back from live OpenAQ sensors in `µg/m³` — directly comparable to CPCB NAAQS thresholds — while gas pollutants report in `ppb` on the currently-active sensors. Next step: apply the standard ppb-to-µg/m³ conversion (concentration × molecular weight ÷ molar volume at reference temperature/pressure) per pollutant before comparison.
+- **Calibrated confidence scoring.** Confidence-score deltas for corroborated vs. uncorroborated reports are currently a reasoned heuristic layered on real CPCB NAAQS thresholds. As resolved incidents accumulate as labeled ground truth, those fixed deltas can be replaced with a calibrated model (e.g. logistic regression over corroboration signal, distance, time-to-resolution).
+- **Persistent citizen identity across devices.** Citizen sessions use Firebase anonymous auth, tied to browser + device by design, for zero-friction reporting. Next step: Firebase's built-in anonymous-to-permanent account linking (`linkWithCredential`), letting a citizen optionally link a phone/email without losing report history or a fresh signup flow.
+- **Role-based access, jurisdiction routing, and engagement features.** Once persistent accounts exist via the linking above, Firebase custom claims can scope authority accounts to a jurisdiction, Firestore security rules can enforce that scoping server-side, and a points/recognition layer can trigger off the same corroboration event that already computes `confidence_score` today.
 
 ## Team
 Kavitha Haima Kidambi — solo build.
