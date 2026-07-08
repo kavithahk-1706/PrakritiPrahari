@@ -4,9 +4,20 @@
 
 City-wide AQI apps report averages. They miss the garbage-dump fire two streets from your house, the construction dust choking one intersection, the smoke pocket no municipal sensor is anywhere near. PrakritiPrahari lets any citizen report a hyperlocal pollution incident — in any combination of text, photo, audio, or video, in any of 11 Indian languages — and have it classified, mapped, cross-verified against real CPCB government sensor data, and routed to authorities in seconds using Gemini.
 
-**🔗 Live app:** `<PASTE VERCEL FRONTEND URL HERE>`
-**🔗 API:** `<PASTE RENDER BACKEND URL HERE>`
-**🎥 Demo video:** `https://youtu.be/twBbWo7SKdI`
+## 🔗 Links
+
+**Live app:** [prakriti-prahari.vercel.app](https://prakriti-prahari.vercel.app/)
+**API:** [prakritiprahari.onrender.com](https://prakritiprahari.onrender.com/)
+
+---
+
+> ### 🎥 Demo Video
+> **The link in the pitch deck has a typo — use this one instead:**
+>
+> ### 👉 [Watch the Demo Video](PASTE_CORRECT_YOUTUBE_LINK_HERE) 👈
+>
+> *Unlisted YouTube link — the deck's URL has a broken character, this one works.*
+
 
 ---
 
