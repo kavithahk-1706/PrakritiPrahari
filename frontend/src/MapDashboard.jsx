@@ -143,10 +143,10 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident, isAuthority }) 
       ? [incidents[0].location.lat, incidents[0].location.lng]
       : HYDERABAD_CENTER;
 
-  const allActive   = incidents.filter((i) => i.status !== "RESOLVED");
+  const allActive = incidents.filter((i) => i.status !== "RESOLVED");
   const allResolved = incidents.filter((i) => i.status === "RESOLVED");
 
-  const activeIncidents   = filterMode === "mine" && currentUid
+  const activeIncidents = filterMode === "mine" && currentUid
     ? allActive.filter((i) => i.submitted_by_uid === currentUid)
     : allActive;
   const resolvedIncidents = filterMode === "mine" && currentUid
@@ -411,6 +411,11 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident, isAuthority }) 
                         <span className="popup-pollutant">{incident.pollutant_type}</span>
                       </div>
                       <h3 className="popup-heading">{incident.summary}</h3>
+                      {incident.location_address && (
+                        <p className="popup-action-text" style={{ marginTop: 4 }}>
+                          {incident.location_address}
+                        </p>
+                      )}
                     </div>
                     <div className="popup-mid">
                       <div className="popup-resolved-by" style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -450,6 +455,11 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident, isAuthority }) 
                         <span className="popup-pollutant">{incident.pollutant_type}</span>
                       </div>
                       <h3 className="popup-heading">{incident.summary}</h3>
+                      {incident.location_address && (
+                        <p className="popup-action-text" style={{ marginTop: 4 }}>
+                          {incident.location_address}
+                        </p>
+                      )}
                     </div>
 
                     <div className="popup-mid">

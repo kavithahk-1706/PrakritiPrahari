@@ -4,18 +4,18 @@ import { ClipboardList, MapIcon, Cpu, ArrowRight } from "lucide-react";
 /* ── Radar mock map — self-contained canvas component ── */
 function RadarMockMap() {
   const canvasRef = useRef(null);
-  const animRef   = useRef(null);
-  const startRef  = useRef(null);
+  const animRef = useRef(null);
+  const startRef = useRef(null);
 
   // Incident dots scattered across the full width of the screen
   const DOTS = [
-    { x: 0.15, y: 0.25, r: 7,  color: "#c9432c" },
-    { x: 0.82, y: 0.65, r: 6,  color: "#d9a83e" },
-    { x: 0.45, y: 0.85, r: 6.5,color: "#d9702f" },
-    { x: 0.65, y: 0.15, r: 5.5,color: "#3fae5c" },
-    { x: 0.30, y: 0.60, r: 5,  color: "#4a9d6e" },
-    { x: 0.88, y: 0.25, r: 5.5,color: "#3fae5c" },
-    { x: 0.12, y: 0.75, r: 5,  color: "#d9a83e" },
+    { x: 0.15, y: 0.25, r: 7, color: "#c9432c" },
+    { x: 0.82, y: 0.65, r: 6, color: "#d9a83e" },
+    { x: 0.45, y: 0.85, r: 6.5, color: "#d9702f" },
+    { x: 0.65, y: 0.15, r: 5.5, color: "#3fae5c" },
+    { x: 0.30, y: 0.60, r: 5, color: "#4a9d6e" },
+    { x: 0.88, y: 0.25, r: 5.5, color: "#3fae5c" },
+    { x: 0.12, y: 0.75, r: 5, color: "#d9a83e" },
   ];
 
   const LIVE_DOT = { x: 0.70, y: 0.45, r: 6, color: "#c9432c", appearAt: 1200 };
@@ -39,7 +39,7 @@ function RadarMockMap() {
 
       const W = canvas.width;
       const H = canvas.height;
-      
+
       ctx.clearRect(0, 0, W, H);
 
       // ── 1. Concentric circles centered in the hero section ──
@@ -58,13 +58,13 @@ function RadarMockMap() {
         ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
         ctx.stroke();
       }
-      
+
       // Radar-ping pulse animation: expanding and fading sonar ping
       for (let p = 0; p < 3; p++) {
         let pTime = (t * 0.4 + p * 0.333) % 1; // 0 to 1 over 2.5 seconds, staggered
         let pulseR = pTime * maxDist;
         let pulseAlpha = (1 - pTime) * 0.15;
-        
+
         if (pTime > 0) {
           ctx.globalAlpha = pulseAlpha;
           ctx.strokeStyle = "#34d068";
@@ -87,7 +87,7 @@ function RadarMockMap() {
       ctx.save();
       ctx.translate(cx, cy);
       const sweepLen = maxDist;
-      const fanSpan  = Math.PI * 0.4;
+      const fanSpan = Math.PI * 0.4;
 
       for (let i = 0; i < 30; i++) {
         const ratio = i / 30;
@@ -152,8 +152,8 @@ function RadarMockMap() {
       // ── 4. Live Dot ──
       if (elapsed > LIVE_DOT.appearAt) {
         const age = (elapsed - LIVE_DOT.appearAt) / 1000;
-        const px  = W * LIVE_DOT.x;
-        const py  = H * LIVE_DOT.y;
+        const px = W * LIVE_DOT.x;
+        const py = H * LIVE_DOT.y;
 
         for (let ring = 0; ring < 3; ring++) {
           const ringAge = age - ring * 0.25;
@@ -217,7 +217,7 @@ function LandingPage({ onNavigate, isAuthority }) {
       {/* ── Hero ── */}
       <section className="hero-section">
         <RadarMockMap />
-        
+
         <div className="hero-content">
           <div className="hero-eyebrow">
             Hyperlocal · Environmental · Monitoring

@@ -46,6 +46,12 @@ function ReportForm({ onViewOnMap }) {
   const [locationAddress, setLocationAddress] = useState(null); // display only — never sent to backend
   const [geocoding, setGeocoding] = useState(false);
 
+  // Search/Autocomplete state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const searchDebounceRef = useRef(null);
+
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
@@ -128,6 +134,48 @@ function ReportForm({ onViewOnMap }) {
     }, 5000);
   }
 
+  /* ── Search for Location (Nominatim autocomplete) ── */
+  const handleSearchChange = (e) => {
+    const query = e.target.value;
+    setSearchQuery(query);
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+
+    if (query.trim().length < 3) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+
+    setIsSearching(true);
+    searchDebounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json`,
+          { headers: { "User-Agent": "PrakritiPrahari-Hackathon/1.0" } }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setSearchResults(data);
+        } else {
+          setSearchResults([]);
+        }
+      } catch (err) {
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 500);
+  };
+
+  const handleSelectSearchResult = (result) => {
+    setLocation({ lat: parseFloat(result.lat), lng: parseFloat(result.lon) });
+    setLocationAddress(result.display_name);
+    setLocationAccuracy(null);
+    setLocationStatus("acquired");
+    setSearchQuery("");
+    setSearchResults([]);
+  };
+
   function hasAnyInput() {
     return Boolean(text.trim() || photo || audio || video);
   }
@@ -145,6 +193,7 @@ function ReportForm({ onViewOnMap }) {
     if (location) {
       formData.append("lat", location.lat);
       formData.append("lng", location.lng);
+      if (locationAddress) formData.append("location_address", locationAddress);
     }
     if (photo) formData.append("image", photo);
     if (audio) formData.append("audio", audio);
@@ -227,6 +276,32 @@ function ReportForm({ onViewOnMap }) {
         <div className="step-body">
           <div className="step-label">Step three</div>
           <h2 className="step-title">Tag your location</h2>
+
+          <div className="location-search-container">
+            <input
+              type="text"
+              placeholder="Search for an address or place..."
+              className="location-search-input"
+              value={searchQuery}
+              onChange={handleSearchChange}
+            />
+            {isSearching && (
+              <Loader2 size={16} style={{ position: "absolute", right: "12px", top: "12px", animation: "spin 1s linear infinite", color: "var(--text-tertiary)" }} />
+            )}
+            {searchResults.length > 0 && (
+              <div className="location-search-dropdown">
+                {searchResults.map((res, i) => (
+                  <div
+                    key={res.place_id || i}
+                    className="location-search-result"
+                    onClick={() => handleSelectSearchResult(res)}
+                  >
+                    {res.display_name}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           <div className="location-widget">
             <button

@@ -339,8 +339,15 @@ body {
 }
 
 @keyframes modal-pop {
-  from { opacity: 0; transform: scale(0.96) translateY(8px); }
-  to   { opacity: 1; transform: scale(1) translateY(0); }
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
 .auth-modal-header {
@@ -1014,6 +1021,61 @@ body {
 }
 
 /* Location Widget */
+.location-search-container {
+  position: relative;
+  margin-bottom: var(--s3);
+}
+
+.location-search-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-default);
+  background: var(--surface-1);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 14px;
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+}
+
+.location-search-input:focus {
+  outline: none;
+  border-color: var(--green-400);
+  background: var(--surface-2);
+}
+
+.location-search-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  margin-top: 4px;
+  z-index: 20;
+  max-height: 200px;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+}
+
+.location-search-result {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+  transition: background var(--dur-fast) var(--ease);
+}
+
+.location-search-result:last-child {
+  border-bottom: none;
+}
+
+.location-search-result:hover {
+  background: var(--surface-3);
+}
+
 .location-widget {
   display: inline-flex;
   align-items: stretch;
@@ -1492,8 +1554,15 @@ body {
 }
 
 @keyframes toast-in {
-  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
-  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
 }
 
 .map-toast-close {
@@ -1739,7 +1808,7 @@ body {
 
 .leaflet-popup-content {
   margin: 0 !important;
-  width: 280px !important;
+  width: 500px !important;
 }
 
 .leaflet-popup-close-button {

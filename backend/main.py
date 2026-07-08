@@ -2,7 +2,7 @@
 
 PrakritiPrahari: FastAPI Backend
 Endpoint: POST/report
-Accepts any combo of text/photo/audio/video from a citizen
+Accepts any combo of text/image/audio/video from a citizen
 Sends whatever was actually submitted to Gemini in one call, 
 Validates the output
 Saves it to Firestore
@@ -131,7 +131,7 @@ RESPONSE_SCHEMA = {
     "type": "OBJECT",
     "properties": {
         "native_transcript": {"type": "STRING", "nullable": True},
-        "translated_transcript": {"type": "STRING"},
+        "translated_transcript": {"type": "STRING", "nullable": True},
         "summary": {"type": "STRING"},
         "pollutant_type": {"type": "STRING"},
         "severity_score": {"type": "INTEGER", "minimum": 1, "maximum": 5},
@@ -294,17 +294,19 @@ async def submit_report(
     text: Optional[str] = Form(None),
     lat: Optional[float] = Form(None),
     lng: Optional[float] = Form(None),
-    image: Optional[UploadFile] = File(None),   # renamed from "image" to match frontend
+    image: Optional[UploadFile] = File(None),  
     audio: Optional[UploadFile] = File(None),
     video: Optional[UploadFile] = File(None),
-    user: dict = Depends(verify_token),          # NEW — see dependency below
+    user: dict = Depends(verify_token),  
+    location_address: Optional[str] = Form(None),   
+      
 ):
     """
     The endpoint where the user can enter their multimodal queries
     """
 
     if not any([text, image, audio, video]):
-        raise HTTPException(status_code=400, detail="Submit at least one of text/photo/audio/video")
+        raise HTTPException(status_code=400, detail="Submit at least one of text/image/audio/video")
 
     if lat is None or lng is None:
         raise HTTPException(status_code=400, detail="Location is required")
@@ -359,8 +361,9 @@ async def submit_report(
         "incident_id": incident_id,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "location": {"lat": lat, "lng": lng},
+        "location_address": location_address,
         "source_type": "CITIZEN",
-        "submitted_by_uid": user["uid"],   # NEW — real ownership record
+        "submitted_by_uid": user["uid"],   
         "input_types_used": input_types_used,
         "media_urls": storage_urls,
         "native_transcript": result.get("native_transcript"),
