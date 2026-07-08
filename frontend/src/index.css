@@ -1347,6 +1347,7 @@ body {
 }
 
 .map-sidebar {
+  position: relative;
   background: var(--surface-1);
   border-right: 1px solid var(--border-subtle);
   display: flex;
@@ -1561,8 +1562,8 @@ body {
   cursor: pointer;
   text-align: left;
   transition: border-color var(--dur-fast) var(--ease),
-              color var(--dur-fast) var(--ease),
-              background var(--dur-fast) var(--ease);
+    color var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease);
 }
 
 .catdd-trigger:hover,
@@ -1615,7 +1616,7 @@ body {
   flex-direction: column;
   padding: 6px;
   gap: 4px;
-  
+
   /* Modern standard scrollbar styling */
   scrollbar-width: thin;
   scrollbar-color: var(--border-strong) transparent;

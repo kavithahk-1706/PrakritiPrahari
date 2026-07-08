@@ -150,6 +150,15 @@ function MapController({ flyTarget, markerRefs }) {
   const map = useMap();
 
   useEffect(() => {
+    const container = map.getContainer();
+    const resizeObserver = new ResizeObserver(() => {
+      map.invalidateSize();
+    });
+    resizeObserver.observe(container);
+    return () => resizeObserver.disconnect();
+  }, [map]);
+
+  useEffect(() => {
     if (!flyTarget) return;
     const { incident } = flyTarget;
     map.flyTo(
@@ -400,7 +409,7 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident, isAuthority }) 
       />
 
       {/* ── Sidebar ── */}
-      <aside className={`map-sidebar ${mobileSidebarOpen ? "mobile-open" : ""}`} style={{ position: "relative" }}>
+      <aside className={`map-sidebar ${mobileSidebarOpen ? "mobile-open" : ""}`}>
         {/* Resize handle */}
         <div
           className="sidebar-resizer"
@@ -708,7 +717,7 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident, isAuthority }) 
             <span>Severity Scale</span>
             <span className="floating-legend-chevron">▼</span>
           </button>
-          
+
           <div className="floating-legend-panel">
             <div className="legend-items">
               {[1, 2, 3, 4, 5].map((level) => (
