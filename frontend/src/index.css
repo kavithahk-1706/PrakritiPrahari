@@ -2561,6 +2561,27 @@ body {
   }
 }
 
+@media (max-width: 1024px) {
+  .leaflet-popup-content {
+    width: 380px !important;
+    height: auto !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .leaflet-popup-content {
+    width: 300px !important;
+    height: auto !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .leaflet-popup-content {
+    width: 250px !important;
+    height: auto !important;
+  }
+}
+
 @media (max-width: 600px) {
   .app-header {
     padding: 0 var(--s4);
