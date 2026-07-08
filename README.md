@@ -14,11 +14,8 @@ City-wide AQI apps report averages. They miss the garbage-dump fire two streets 
 > ### 🎥 Demo Video
 > **The link in the pitch deck has a typo — use this one instead:**
 >
-> ### [Watch the Demo Video](PASTE_CORRECT_YOUTUBE_LINK_HERE)
+> ### [Watch the Demo Video](https://www.youtube.com/watch?v=twBbWo7SKdI)
 >
-> *Unlisted YouTube link — the deck's URL has a broken character, this one works.*
-
-
 ---
 
 ## How it works
