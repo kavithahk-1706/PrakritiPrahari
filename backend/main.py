@@ -28,6 +28,8 @@ import cloudinary
 import cloudinary.uploader
 import anyio
 from fastapi.middleware.cors import CORSMiddleware
+from cpcb import is_airborne, get_nearby_pm_reading, get_cpcb_corroboration
+
 
 load_dotenv()
 
@@ -356,6 +358,7 @@ async def submit_report(
                 pass
 
     severity = validate_severity(result["severity_score"])
+    corroboration = get_cpcb_corroboration(result["pollutant_type"], result["summary"], lat, lng)
 
     incident = {
         "incident_id": incident_id,
@@ -370,7 +373,13 @@ async def submit_report(
         "translated_transcript": result.get("translated_transcript"),
         "pollutant_type": result["pollutant_type"],
         "severity_score": severity,
-        "confidence_score": None,
+        "confidence_score": corroboration["confidence_score"],
+        "confidence_basis": {
+            "reason": corroboration["reason"],
+            "station": corroboration["station"],
+            "distance_km": corroboration["distance_km"],
+            "pollutants": corroboration["pollutants"],
+        },
         "summary": result["summary"],
         "recommended_action": result["recommended_action"],
         "status": "ACTIVE",
