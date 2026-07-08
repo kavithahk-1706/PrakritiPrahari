@@ -210,7 +210,7 @@ function RadarMockMap() {
 }
 
 /* ── LandingPage ── */
-function LandingPage({ onNavigate }) {
+function LandingPage({ onNavigate, isAuthority }) {
   return (
     <div className="landing">
 
@@ -237,12 +237,14 @@ function LandingPage({ onNavigate }) {
           </p>
 
           <div className="hero-actions">
-            <button className="btn-primary" onClick={() => onNavigate("submit")}>
-              <ClipboardList size={16} />
-              Report an Incident
-            </button>
+            {!isAuthority && (
+              <button className="btn-primary" onClick={() => onNavigate("submit")}>
+                <ClipboardList size={16} />
+                Report an Incident
+              </button>
+            )}
             <button className="btn-ghost" onClick={() => onNavigate("map")}>
-              View Live Map
+              {isAuthority ? "Open Dashboard" : "View Live Map"}
               <ArrowRight size={15} />
             </button>
           </div>
@@ -324,17 +326,32 @@ function LandingPage({ onNavigate }) {
       </section>
 
       {/* ── Final CTA ── */}
-      <section className="landing-cta">
-        <div className="cta-inner">
-          <h2 className="cta-heading">See something? Report it.</h2>
-          <p className="cta-body">
-            Every report makes the map more accurate for your street and your neighbourhood.
-          </p>
-          <button className="btn-primary" onClick={() => onNavigate("submit")}>
-            Start a Report
-          </button>
-        </div>
-      </section>
+      {isAuthority ? (
+        <section className="landing-cta">
+          <div className="cta-inner">
+            <h2 className="cta-heading">New incidents in real time.</h2>
+            <p className="cta-body">
+              Every citizen report is on your dashboard the moment it's submitted — severity-scored and map-pinned.
+            </p>
+            <button className="btn-primary" onClick={() => onNavigate("map")}>
+              <MapIcon size={16} />
+              Open Dashboard
+            </button>
+          </div>
+        </section>
+      ) : (
+        <section className="landing-cta">
+          <div className="cta-inner">
+            <h2 className="cta-heading">See something? Report it.</h2>
+            <p className="cta-body">
+              Every report makes the map more accurate for your street and your neighbourhood.
+            </p>
+            <button className="btn-primary" onClick={() => onNavigate("submit")}>
+              Start a Report
+            </button>
+          </div>
+        </section>
+      )}
 
       {/* ── Footer ── */}
       <footer className="landing-footer">

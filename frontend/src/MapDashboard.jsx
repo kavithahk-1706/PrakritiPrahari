@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { MapContainer, TileLayer, CircleMarker, Marker, Popup, useMap } from "react-leaflet";
 import { RefreshCw, Zap, User, Building2, CheckCircle2, Menu, X } from "lucide-react";
 import L from "leaflet";
+import { getIdToken, auth } from "./firebase";
+
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
@@ -57,7 +59,7 @@ function MapController({ flyTarget, markerRefs }) {
   return null;
 }
 
-function MapDashboard({ focusedIncidentId, onClearFocusIncident }) {
+function MapDashboard({ focusedIncidentId, onClearFocusIncident, isAuthority }) {
   const [incidents, setIncidents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -68,9 +70,14 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident }) {
   const [resolvedOpen, setResolvedOpen] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
+  // "All" / "Mine" filter toggle
+  const [filterMode, setFilterMode] = useState("all");
+
   // Click-to-recenter: flyTarget changes trigger MapController
   const [flyTarget, setFlyTarget] = useState(null);
   const markerRefs = useRef({});
+
+  const currentUid = auth.currentUser?.uid ?? null;
 
   async function fetchIncidents() {
     setLoading(true);
@@ -87,21 +94,29 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident }) {
     }
   }
 
-  async function resolveIncident(incidentId, resolvedBy) {
+  async function resolveIncident(incidentId) {
     setResolvingId(incidentId);
     try {
+      const token = await getIdToken();
       const response = await fetch(
-        `${API_BASE}/incidents/${incidentId}/resolve?resolved_by=${resolvedBy}`,
-        { method: "PATCH" }
+        `${API_BASE}/incidents/${incidentId}/resolve`,
+        {
+          method: "PATCH",
+          headers: { Authorization: `Bearer ${token}` },
+        }
       );
-      if (!response.ok) throw new Error(`Resolve failed (${response.status})`);
 
-      // update this incident's status in place instead of removing it -
-      // resolved incidents now stay on the map as green checkmarks
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}));
+        throw new Error(errBody.detail || `Resolve failed (${response.status})`);
+      }
+
+      const data = await response.json();
+
       setIncidents((prev) =>
         prev.map((incident) =>
           incident.incident_id === incidentId
-            ? { ...incident, status: "RESOLVED", resolved_by: resolvedBy }
+            ? { ...incident, status: "RESOLVED", resolved_by: data.resolved_by }
             : incident
         )
       );
@@ -116,13 +131,27 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident }) {
     fetchIncidents();
   }, []);
 
+  // Auto-dismiss error toast after 4 seconds
+  useEffect(() => {
+    if (!error) return;
+    const t = setTimeout(() => setError(null), 4000);
+    return () => clearTimeout(t);
+  }, [error]);
+
   const mapCenter =
     incidents.length > 0
       ? [incidents[0].location.lat, incidents[0].location.lng]
       : HYDERABAD_CENTER;
 
-  const activeIncidents   = incidents.filter((i) => i.status !== "RESOLVED");
-  const resolvedIncidents = incidents.filter((i) => i.status === "RESOLVED");
+  const allActive   = incidents.filter((i) => i.status !== "RESOLVED");
+  const allResolved = incidents.filter((i) => i.status === "RESOLVED");
+
+  const activeIncidents   = filterMode === "mine" && currentUid
+    ? allActive.filter((i) => i.submitted_by_uid === currentUid)
+    : allActive;
+  const resolvedIncidents = filterMode === "mine" && currentUid
+    ? allResolved.filter((i) => i.submitted_by_uid === currentUid)
+    : allResolved;
 
   // Trigger a fly + popup open from the sidebar list
   function handleSelectIncident(incident) {
@@ -151,17 +180,17 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident }) {
   return (
     <div className="map-layout">
       {/* ── Mobile Sidebar Toggle ── */}
-      <button 
-        className="mobile-sidebar-toggle" 
+      <button
+        className="mobile-sidebar-toggle"
         onClick={() => setMobileSidebarOpen(true)}
       >
         <Menu size={24} />
       </button>
 
       {/* ── Sidebar Overlay (Mobile) ── */}
-      <div 
-        className={`mobile-sidebar-overlay ${mobileSidebarOpen ? "mobile-open" : ""}`} 
-        onClick={() => setMobileSidebarOpen(false)} 
+      <div
+        className={`mobile-sidebar-overlay ${mobileSidebarOpen ? "mobile-open" : ""}`}
+        onClick={() => setMobileSidebarOpen(false)}
       />
 
       {/* ── Sidebar ── */}
@@ -176,6 +205,28 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident }) {
           </button>
         </div>
 
+        {/* ── Authority stats strip ── */}
+        {isAuthority && (
+          <div className="authority-stats-strip">
+            <div className="authority-stat">
+              <span className="authority-stat-num">{allActive.length}</span>
+              <span className="authority-stat-label">Active</span>
+            </div>
+            <div className="authority-stat-divider" />
+            <div className="authority-stat">
+              <span className="authority-stat-num authority-stat-critical">
+                {allActive.filter((i) => i.severity_score === 5).length}
+              </span>
+              <span className="authority-stat-label">Critical</span>
+            </div>
+            <div className="authority-stat-divider" />
+            <div className="authority-stat">
+              <span className="authority-stat-num">{allResolved.length}</span>
+              <span className="authority-stat-label">Resolved</span>
+            </div>
+          </div>
+        )}
+
         <div className="sidebar-top-bar">
           <button
             className="refresh-btn"
@@ -185,12 +236,34 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident }) {
             <RefreshCw size={12} className="refresh-icon" />
             {loading ? "Loading…" : "Refresh"}
           </button>
-          <div className="incident-stats">
-            <strong>{activeIncidents.length}</strong> active &middot; <strong>{resolvedIncidents.length}</strong> resolved
-          </div>
+          {!isAuthority && (
+            <div className="filter-toggle">
+              <button
+                className={`filter-toggle-btn ${filterMode === "all" ? "active" : ""}`}
+                onClick={() => setFilterMode("all")}
+              >
+                All
+              </button>
+              <button
+                className={`filter-toggle-btn ${filterMode === "mine" ? "active" : ""}`}
+                onClick={() => setFilterMode("mine")}
+                disabled={!currentUid}
+              >
+                Mine
+              </button>
+            </div>
+          )}
         </div>
 
-        {error && <div className="map-error">{error}</div>}
+        {/* ── Error Toast ── */}
+        {error && (
+          <div className="map-toast-error">
+            <span>{error}</span>
+            <button className="map-toast-close" onClick={() => setError(null)}>
+              <X size={14} />
+            </button>
+          </div>
+        )}
 
         {/* Scrollable incident list */}
         <div className="incident-list-container">
@@ -203,7 +276,7 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident }) {
             >
               <div className="collapsible-header-left">
                 Active
-                <span className={`collapsible-count ${activeIncidents.length > 0 ? "has-items" : ""}`}>
+                <span className={`collapsible-count ${activeIncidents.length > 0 ? "has-active" : ""}`}>
                   {activeIncidents.length}
                 </span>
               </div>
@@ -226,6 +299,9 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident }) {
                     <div className="incident-item-content">
                       <div className="incident-item-type">
                         Sev {incident.severity_score} · {incident.pollutant_type}
+                        {currentUid && incident.submitted_by_uid === currentUid && (
+                          <span className="incident-yours-badge">Yours</span>
+                        )}
                       </div>
                       <div className="incident-item-summary">{incident.summary}</div>
                     </div>
@@ -243,7 +319,9 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident }) {
             >
               <div className="collapsible-header-left">
                 Resolved
-                <span className="collapsible-count">{resolvedIncidents.length}</span>
+                <span className={`collapsible-count ${resolvedIncidents.length > 0 ? "has-resolved" : ""}`}>
+                  {resolvedIncidents.length}
+                </span>
               </div>
               <span className={`collapsible-chevron ${resolvedOpen ? "open" : ""}`}>▼</span>
             </button>
@@ -259,7 +337,12 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident }) {
                   >
                     <span className="incident-sev-dot" style={{ background: RESOLVED_GREEN }} />
                     <div className="incident-item-content">
-                      <div className="incident-item-type">{incident.pollutant_type}</div>
+                      <div className="incident-item-type">
+                        {incident.pollutant_type}
+                        {currentUid && incident.submitted_by_uid === currentUid && (
+                          <span className="incident-yours-badge">Yours</span>
+                        )}
+                      </div>
                       <div className="incident-item-summary">{incident.summary}</div>
                     </div>
                   </button>
@@ -380,18 +463,10 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident }) {
                       <button
                         className="resolve-btn citizen"
                         disabled={resolvingId === incident.incident_id}
-                        onClick={() => resolveIncident(incident.incident_id, "CITIZEN")}
+                        onClick={() => resolveIncident(incident.incident_id)}
                       >
-                        <User size={11} />
-                        Citizen
-                      </button>
-                      <button
-                        className="resolve-btn authority"
-                        disabled={resolvingId === incident.incident_id}
-                        onClick={() => resolveIncident(incident.incident_id, "AUTHORITY")}
-                      >
-                        <Building2 size={11} />
-                        Authority
+                        <CheckCircle2 size={11} />
+                        Mark Resolved
                       </button>
                     </div>
                   </div>

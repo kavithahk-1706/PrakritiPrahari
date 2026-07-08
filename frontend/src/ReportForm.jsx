@@ -3,6 +3,14 @@ import { Camera, Mic, Video, MapPin, RotateCcw, Loader2, X, Circle, Square } fro
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
+import { getIdToken } from "./firebase";
+
+
+function hasAnyInput() {
+  return Boolean((text.trim() || photo || audio || video) && locationStatus === "acquired");
+}
+
+
 /* ── Reverse geocode via Nominatim ── */
 async function reverseGeocode(lat, lng) {
   try {
@@ -135,17 +143,19 @@ function ReportForm({ onViewOnMap }) {
     const formData = new FormData();
     if (text.trim()) formData.append("text", text.trim());
     if (location) {
-      // Raw coordinates — address is display-only, never sent to backend
       formData.append("lat", location.lat);
       formData.append("lng", location.lng);
     }
-    if (photo) formData.append("photo", photo);
+    if (photo) formData.append("image", photo);
     if (audio) formData.append("audio", audio);
     if (video) formData.append("video", video);
 
     try {
+      const token = await getIdToken();
+
       const response = await fetch(`${API_BASE}/report`, {
         method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
 
@@ -157,7 +167,6 @@ function ReportForm({ onViewOnMap }) {
       const data = await response.json();
       setResult(data);
 
-      // reset the form for the next report
       setText("");
       setPhoto(null);
       setAudio(null);
@@ -168,7 +177,6 @@ function ReportForm({ onViewOnMap }) {
       setSubmitting(false);
     }
   }
-
   const hasEvidence = Boolean(photo || audio || video);
   const hasLocation = locationStatus === "acquired";
 
@@ -232,10 +240,10 @@ function ReportForm({ onViewOnMap }) {
 
             <div className="location-status-area">
               <span className={`loc-pulse ${locationStatus}`} />
-              {locationStatus === "idle"      && <span>No location attached</span>}
+              {locationStatus === "idle" && <span>No location attached</span>}
               {locationStatus === "acquiring" && <span>Detecting, please wait...</span>}
-              {locationStatus === "error"     && <span style={{ color: "var(--sev-5)" }}>Location unavailable</span>}
-              {locationStatus === "acquired"  && (
+              {locationStatus === "error" && <span style={{ color: "var(--sev-5)" }}>Location unavailable</span>}
+              {locationStatus === "acquired" && (
                 <span style={{ color: "var(--green-400)", fontWeight: 600 }}>Location acquired</span>
               )}
             </div>
@@ -342,8 +350,8 @@ function MediaInput({ label, accept, file, onChange }) {
   const fileInputRef = useRef(null);
 
   const IconMap = { Photo: Camera, Audio: Mic, Video };
-  const hints   = { Photo: "JPG, PNG, WEBP", Audio: "MP3, WAV, M4A", Video: "MP4, MOV, WEBM" };
-  const Icon    = IconMap[label];
+  const hints = { Photo: "JPG, PNG, WEBP", Audio: "MP3, WAV, M4A", Video: "MP4, MOV, WEBM" };
+  const Icon = IconMap[label];
 
   const handleCapture = (capturedFile) => {
     onChange(capturedFile);
@@ -364,11 +372,11 @@ function MediaInput({ label, accept, file, onChange }) {
           <Icon size={20} strokeWidth={1.6} />
         </div>
         <div className="upload-type">{label}</div>
-        
+
         {!file && (
           <div className="upload-hint">{hints[label]}</div>
         )}
-        
+
         {file ? (
           <>
             <div className="upload-filename">{file.name}</div>
@@ -395,10 +403,10 @@ function MediaInput({ label, accept, file, onChange }) {
       </div>
 
       {showCapture && (
-        <CaptureModal 
-          type={label} 
-          onCapture={handleCapture} 
-          onClose={() => setShowCapture(false)} 
+        <CaptureModal
+          type={label}
+          onCapture={handleCapture}
+          onClose={() => setShowCapture(false)}
         />
       )}
     </>
@@ -434,7 +442,7 @@ function CaptureModal({ type, onCapture, onClose }) {
   const [isRecording, setIsRecording] = useState(false);
   const [recordTime, setRecordTime] = useState(0);
   const [audioLevel, setAudioLevel] = useState(0);
-  
+
   const streamRef = useRef(null);
   const abortInitRef = useRef(false);
   const videoRef = useRef(null);
@@ -445,7 +453,7 @@ function CaptureModal({ type, onCapture, onClose }) {
   const audioCtxRef = useRef(null);
   const analyserRef = useRef(null);
   const rafRef = useRef(null);
-  
+
   const mimeType = getMimeType(type);
 
   // Stop stream and clean up function
@@ -495,18 +503,18 @@ function CaptureModal({ type, onCapture, onClose }) {
       } else {
         s = await navigator.mediaDevices.getUserMedia({ audio: true });
       }
-      
+
       if (abortInitRef.current) {
         s.getTracks().forEach(t => t.stop());
         return;
       }
-      
+
       streamRef.current = s;
-      
+
       if (videoRef.current && (type === "Photo" || type === "Video")) {
         videoRef.current.srcObject = s;
       }
-      
+
       if (type === "Audio") {
         // Setup audio level analyser
         const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -517,13 +525,13 @@ function CaptureModal({ type, onCapture, onClose }) {
         analyserRef.current = analyser;
         const source = ctx.createMediaStreamSource(s);
         source.connect(analyser);
-        
+
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
         const updateLevel = () => {
           if (!analyserRef.current) return;
           analyserRef.current.getByteFrequencyData(dataArray);
           let sum = 0;
-          for(let i = 0; i < dataArray.length; i++) {
+          for (let i = 0; i < dataArray.length; i++) {
             sum += dataArray[i];
           }
           setAudioLevel(sum / dataArray.length);
@@ -556,7 +564,7 @@ function CaptureModal({ type, onCapture, onClose }) {
   const handleRetake = () => {
     initCapture();
   };
-  
+
   const handleUse = () => {
     if (previewBlob) {
       const ext = getFileExtension(previewBlob.type);
@@ -601,11 +609,11 @@ function CaptureModal({ type, onCapture, onClose }) {
       const options = mimeType ? { mimeType } : undefined;
       const mr = new MediaRecorder(currentStream, options);
       mediaRecorderRef.current = mr;
-      
+
       mr.ondataavailable = (e) => {
         if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
       };
-      
+
       mr.onstop = () => {
         const finalMime = mimeType || mr.mimeType;
         const blob = new Blob(chunksRef.current, { type: finalMime });
@@ -613,11 +621,11 @@ function CaptureModal({ type, onCapture, onClose }) {
         cleanupStream();
         setPreviewBlob(blob);
       };
-      
+
       mr.start();
       setIsRecording(true);
       setRecordTime(0);
-      
+
       timerRef.current = setInterval(() => {
         setRecordTime(prev => {
           const next = prev + 1;
@@ -639,7 +647,7 @@ function CaptureModal({ type, onCapture, onClose }) {
     const s = secs % 60;
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
-  
+
   const handleBackdropClick = (e) => {
     if (e.target.classList.contains("capture-modal-overlay")) {
       onClose();
@@ -651,9 +659,9 @@ function CaptureModal({ type, onCapture, onClose }) {
       <div className="capture-modal-window">
         <div className="capture-modal-header">
           <h3>Capture {type}</h3>
-          <button className="capture-close-btn" onClick={onClose}><X size={20}/></button>
+          <button className="capture-close-btn" onClick={onClose}><X size={20} /></button>
         </div>
-        
+
         <div className="capture-modal-body">
           {error ? (
             <div className="capture-error">{error}</div>
@@ -673,7 +681,7 @@ function CaptureModal({ type, onCapture, onClose }) {
               )}
               {type === "Audio" && (
                 <div className="capture-audio-visualizer">
-                  <div className="audio-level-dot" style={{ transform: `scale(${1 + audioLevel/100})`, opacity: 0.5 + (audioLevel/255) }}></div>
+                  <div className="audio-level-dot" style={{ transform: `scale(${1 + audioLevel / 100})`, opacity: 0.5 + (audioLevel / 255) }}></div>
                   <div className="audio-timer">{formatTime(recordTime)} / 2:00</div>
                 </div>
               )}
@@ -686,7 +694,7 @@ function CaptureModal({ type, onCapture, onClose }) {
             </div>
           )}
         </div>
-        
+
         <div className="capture-modal-footer">
           {!previewBlob && !error && (
             <div className="capture-controls">
@@ -708,7 +716,7 @@ function CaptureModal({ type, onCapture, onClose }) {
               )}
             </div>
           )}
-          
+
           {previewBlob && (
             <div className="capture-preview-actions">
               <button className="btn-secondary" onClick={handleRetake}>Retake</button>
