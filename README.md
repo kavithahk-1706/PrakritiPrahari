@@ -6,15 +6,15 @@ City-wide AQI apps report averages. They miss the garbage-dump fire two streets 
 
 ## 🔗 Links
 
-**Live app:** [prakriti-prahari.vercel.app](https://prakriti-prahari.vercel.app/)
-**API:** [prakritiprahari.onrender.com](https://prakritiprahari.onrender.com/)
+#### **Live app:** [prakriti-prahari.vercel.app](https://prakriti-prahari.vercel.app/)
+#### **API:** [prakritiprahari.onrender.com](https://prakritiprahari.onrender.com/)
 
 ---
 
 > ### 🎥 Demo Video
 > **The link in the pitch deck has a typo — use this one instead:**
 >
-> ### 👉 [Watch the Demo Video](PASTE_CORRECT_YOUTUBE_LINK_HERE) 👈
+> ### [Watch the Demo Video](PASTE_CORRECT_YOUTUBE_LINK_HERE)
 >
 > *Unlisted YouTube link — the deck's URL has a broken character, this one works.*
 
