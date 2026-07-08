@@ -17,17 +17,16 @@ import math
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Header
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 from google.genai.types import FinishReason
 import firebase_admin
-from firebase_admin import credentials, firestore
+from firebase_admin import credentials, firestore, auth as firebase_auth
 import cloudinary
 import cloudinary.uploader
 import anyio
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
@@ -266,6 +265,28 @@ def upload_to_cloudinary(local_path:str, incident_id: str)->str:
     
     return result["secure_url"]
 
+
+async def verify_token(authorization: Optional[str] = Header(None)) -> dict:
+    """
+    Reads the Authorization header, verifies it's a real firebase-signed token
+    (not just decodes it - actually checks the cryptographic signature against
+    firebase's servers), and returns who made the request.
+    """
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+
+    token = authorization.split(" ", 1)[1]
+
+    try:
+        decoded = firebase_auth.verify_id_token(token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    return {
+        "uid": decoded["uid"],
+        "is_authority": decoded.get("role") == "authority",
+    }
+
 # ------- 3. endpoints -------
 
 @app.post("/report")
@@ -273,87 +294,89 @@ async def submit_report(
     text: Optional[str] = Form(None),
     lat: Optional[float] = Form(None),
     lng: Optional[float] = Form(None),
-    image: Optional[UploadFile] = File(None),
+    image: Optional[UploadFile] = File(None),   # renamed from "image" to match frontend
     audio: Optional[UploadFile] = File(None),
     video: Optional[UploadFile] = File(None),
+    user: dict = Depends(verify_token),          # NEW — see dependency below
 ):
-    
     """
-    
     The endpoint where the user can enter their multimodal queries
-    
     """
-    
-    if not any([text,image,audio,video]):
+
+    if not any([text, image, audio, video]):
         raise HTTPException(status_code=400, detail="Submit at least one of text/photo/audio/video")
-    
-    incident_id=str(uuid.uuid4())
-    input_types_used=[]
-    content_parts=[]
-    gemini_file_refs=[]
-    storage_urls={}
-    temp_paths=[]
-    
+
+    if lat is None or lng is None:
+        raise HTTPException(status_code=400, detail="Location is required")
+
+    incident_id = str(uuid.uuid4())
+    input_types_used = []
+    content_parts = []
+    gemini_file_refs = []
+    storage_urls = {}
+    temp_paths = []
+
     if text:
         content_parts.append(text)
         input_types_used.append("text")
-        
-        for label, upload_file in [("image", image), ("audio",audio), ("video",video)]:
-            if upload_file is not None:
-                temp_path=await save_temp(upload_file)
-                temp_paths.append(temp_path)
-                
-                storage_urls[label]=upload_to_cloudinary(temp_path, incident_id)
-                
-                gemini_ref=upload_gemini_file(temp_path)
-                gemini_file_refs.append(gemini_ref)
-                
-                content_parts.append(gemini_ref)
-                
-                input_types_used.append(label) 
-        
-        content_parts.append(PROMPT)
-        
-        try:
-            print("calling gemini...")
-            response=call_gemini_with_retry(content_parts)
-            print("gemini responded")
-            result=response.parsed if hasattr(response, "parsed") else None
-            if result is None:
-                import json
-                result=json.loads(response.text)
-                
-        finally:
-            cleanup_gemini_files(*gemini_file_refs)
-            for p in temp_paths:
-                try: 
-                    os.remove(p)
-                except OSError:
-                    pass
-        
-        severity=validate_severity(result["severity_score"])
-        
-        incident={
-            "incident_id": incident_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "location": {"lat":lat, "lng":lng} if lat is not None and lng is not None else None,
-            "source_type": "CITIZEN",
-            "input_types_used": input_types_used,
-            "media_urls":storage_urls,
-            "native_transcript": result.get("native_transcript"),
-            "translated_transcript": result.get("translated_transcript"),
-            "pollutant_type": result["pollutant_type"],
-            "severity_score": severity,
-            "confidence_score": None, 
-            "summary": result["summary"],
-            "recommended_action": result["recommended_action"],
-            "status": "ACTIVE",
-            "resolved_by": None
-        }
-        
-        db.collection("incidents").document(incident_id).set(incident)
-        
-        return incident
+
+    # unindented out of "if text:" — this now runs for ANY combo of inputs,
+    # not just when text is present
+    for label, upload_file in [("image", image), ("audio", audio), ("video", video)]:
+        if upload_file is not None:
+            temp_path = await save_temp(upload_file)
+            temp_paths.append(temp_path)
+
+            storage_urls[label] = upload_to_cloudinary(temp_path, incident_id)
+
+            gemini_ref = upload_gemini_file(temp_path)
+            gemini_file_refs.append(gemini_ref)
+
+            content_parts.append(gemini_ref)
+            input_types_used.append(label)
+
+    content_parts.append(PROMPT)
+
+    try:
+        print("calling gemini...")
+        response = call_gemini_with_retry(content_parts)
+        print("gemini responded")
+        result = response.parsed if hasattr(response, "parsed") else None
+        if result is None:
+            import json
+            result = json.loads(response.text)
+    finally:
+        cleanup_gemini_files(*gemini_file_refs)
+        for p in temp_paths:
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+
+    severity = validate_severity(result["severity_score"])
+
+    incident = {
+        "incident_id": incident_id,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "location": {"lat": lat, "lng": lng},
+        "source_type": "CITIZEN",
+        "submitted_by_uid": user["uid"],   # NEW — real ownership record
+        "input_types_used": input_types_used,
+        "media_urls": storage_urls,
+        "native_transcript": result.get("native_transcript"),
+        "translated_transcript": result.get("translated_transcript"),
+        "pollutant_type": result["pollutant_type"],
+        "severity_score": severity,
+        "confidence_score": None,
+        "summary": result["summary"],
+        "recommended_action": result["recommended_action"],
+        "status": "ACTIVE",
+        "resolved_by": None,
+    }
+
+    db.collection("incidents").document(incident_id).set(incident)
+
+    return incident
 
 @app.get("/incidents")
 async def list_incidents():
@@ -365,31 +388,30 @@ async def list_incidents():
     
     docs=db.collection("incidents").stream()
     
+   
     return [doc.to_dict() for doc in docs]
-        
-        
-@app.patch("/incidents/{incident_id}/resolve")
-async def resolve_incident(incident_id: str, resolved_by: str):
-    
-    """
-    for citizns/authorities to mark an incident resolved in case it's fixed 
-    """
-    if resolved_by not in ("CITIZEN", "AUTHORITY"):
-            raise HTTPException(status_code=400, detail="resolved_by must be CITIZEN or AUTHORITY")
 
+
+@app.patch("/incidents/{incident_id}/resolve")
+async def resolve_incident(incident_id: str, user: dict = Depends(verify_token)):
+    """
+    Citizens can resolve their own reports. The authority account can resolve anything.
+    """
     doc_ref = db.collection("incidents").document(incident_id)
     doc = doc_ref.get()
 
     if not doc.exists:
         raise HTTPException(status_code=404, detail="Incident not found")
 
+    incident = doc.to_dict()
+
+    if user["is_authority"]:
+        resolved_by = "AUTHORITY"
+    elif incident.get("submitted_by_uid") == user["uid"]:
+        resolved_by = "CITIZEN"
+    else:
+        raise HTTPException(status_code=403, detail="You can only resolve incidents you reported")
+
     doc_ref.update({"status": "RESOLVED", "resolved_by": resolved_by})
 
     return {"incident_id": incident_id, "status": "RESOLVED", "resolved_by": resolved_by}
-                    
-                   
-
-  
-    
-        
-
