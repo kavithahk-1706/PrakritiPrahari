@@ -77,13 +77,52 @@ function CategoryDropdown({ value, onChange }) {
 }
 
 // severity 1-5 mapped to color - matches the legend and pin fill
+// NOTE: Level 1 intentionally uses a blue-teal, not green, to stay visually
+// distinct from RESOLVED_GREEN (#3fae5c) in the legend.
 const SEVERITY_COLORS = {
-  1: "#4a9d6e",
+  1: "#3a8fc4",
   2: "#8fae4a",
   3: "#d9a83e",
   4: "#d9702f",
   5: "#c9432c",
 };
+
+// Derive a severity bucket (1-5) for a sensor incident based on worst
+// value/threshold ratio across whichever pollutants are present.
+function getSensorSeverity(pollutants) {
+  if (!pollutants) return null;
+  const ratios = Object.values(pollutants)
+    .filter((p) => p && p.threshold)
+    .map((p) => p.value / p.threshold);
+  if (!ratios.length) return null;
+  const worst = Math.max(...ratios);
+  if (worst < 0.5) return 1;
+  if (worst < 0.75) return 2;
+  if (worst < 1.0) return 3;
+  if (worst < 1.5) return 4;
+  return 5;
+}
+
+// Factory: returns a diamond-shaped L.divIcon filled with the severity color.
+// The diamond is a square div rotated 45 °, matching the overall size/border
+// treatment of resolvedIcon so the two shapes sit at the same visual weight.
+function sensorIcon(bucket) {
+  const color = SEVERITY_COLORS[bucket] || "#888";
+  return L.divIcon({
+    className: "sensor-marker",
+    html: `<div style="
+      background: ${color};
+      width: 18px; height: 18px;
+      transform: rotate(45deg);
+      border: 2px solid #fff;
+      box-shadow: 0 0 4px rgba(0,0,0,0.4);
+    "></div>`,
+    // iconSize/Anchor account for the rotated square visually centering on
+    // the lat/lng point. The visual diagonal is ~25px but DOM size stays 22.
+    iconSize: [22, 22],
+    iconAnchor: [11, 11],
+  });
+}
 
 const RESOLVED_GREEN = "#3fae5c";
 
@@ -134,20 +173,31 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident, isAuthority }) 
   const [error, setError] = useState(null);
   const [resolvingId, setResolvingId] = useState(null);
 
-  // Resizable sidebar state (defaulting to the current 340px)
-  const [sidebarWidth, setSidebarWidth] = useState(340);
+  // Resizable sidebar state (defaulting to 380px)
+  const [sidebarWidth, setSidebarWidth] = useState(380);
   const [isDragging, setIsDragging] = useState(false);
 
   // Sidebar collapsible state
   const [activeOpen, setActiveOpen] = useState(true);
   const [resolvedOpen, setResolvedOpen] = useState(false);
+  const [sensorOpen, setSensorOpen] = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
-  // "All" / "Mine" filter toggle
+  // Floating legend state
+  const [legendExpanded, setLegendExpanded] = useState(false);
+  const legendRef = useRef(null);
+
+  // "All" / "Mine" filter toggle (citizen reports only)
   const [filterMode, setFilterMode] = useState("all");
 
-  // Pollution category filter
+  // Source-type filter: "citizen" | "sensor" | "both"
+  const [sourceFilter, setSourceFilter] = useState("both");
+
+  // Pollution category filter (citizen mode only)
   const [categoryFilter, setCategoryFilter] = useState("all");
+
+  // Sensor manual-refresh loading state (separate from citizen fetchIncidents loading)
+  const [refreshingSensors, setRefreshingSensors] = useState(false);
 
   // Click-to-recenter: flyTarget changes trigger MapController
   const [flyTarget, setFlyTarget] = useState(null);
@@ -160,6 +210,7 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident, isAuthority }) 
     setError(null);
     try {
       const response = await fetch(`${API_BASE}/incidents`);
+
       if (!response.ok) throw new Error(`Failed to load incidents (${response.status})`);
       const data = await response.json();
       setIncidents(data.filter((incident) => incident.location));
@@ -167,6 +218,25 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident, isAuthority }) 
       setError(err.message || "Couldn't load incidents");
     } finally {
       setLoading(false);
+    }
+  }
+
+  // POST /admin/refresh-sensors, then pull fresh data so new sensor docs land on map
+  async function refreshSensors() {
+    setRefreshingSensors(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/admin/refresh-sensors`, { method: "POST" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail || `Sensor refresh failed (${res.status})`);
+      }
+    } catch (err) {
+      setError(err.message || "Sensor refresh failed");
+    } finally {
+      setRefreshingSensors(false);
+      // Always re-fetch incidents so updated sensor docs appear on map
+      fetchIncidents();
     }
   }
 
@@ -211,7 +281,7 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident, isAuthority }) 
     fetchIncidents();
   }, []);
 
-  // Handle sidebar resize dragging
+  // Handle sidebar resize dragging (horizontal)
   useEffect(() => {
     if (!isDragging) return;
     function handleMouseMove(e) {
@@ -230,6 +300,17 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident, isAuthority }) 
     };
   }, [isDragging]);
 
+  // Handle click outside for floating legend
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (legendRef.current && !legendRef.current.contains(e.target)) {
+        setLegendExpanded(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   // Auto-dismiss error toast after 4 seconds
   useEffect(() => {
     if (!error) return;
@@ -242,22 +323,41 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident, isAuthority }) 
       ? [incidents[0].location.lat, incidents[0].location.lng]
       : HYDERABAD_CENTER;
 
-  const allActive = incidents.filter((i) => i.status !== "RESOLVED");
-  const allResolved = incidents.filter((i) => i.status === "RESOLVED");
+  // Split by source type
+  const citizenIncidents = incidents.filter((i) => i.source_type !== "SENSOR");
+  const sensorIncidents = incidents.filter((i) => i.source_type === "SENSOR");
 
-  const activeByMode = filterMode === "mine" && currentUid
+  // Which incidents appear on the map based on sourceFilter
+  const visibleOnMap = sourceFilter === "citizen"
+    ? citizenIncidents
+    : sourceFilter === "sensor"
+      ? sensorIncidents
+      : incidents;
+
+  // Citizen-only sidebar lists
+  const allActive = citizenIncidents.filter((i) => i.status !== "RESOLVED");
+  const allResolved = citizenIncidents.filter((i) => i.status === "RESOLVED");
+
+  // "Mine" toggle applies only to citizen reports
+  const mineDisabled = sourceFilter === "sensor" || !currentUid;
+  const effectiveFilterMode = mineDisabled ? "all" : filterMode;
+
+  const activeByMode = effectiveFilterMode === "mine" && currentUid
     ? allActive.filter((i) => i.submitted_by_uid === currentUid)
     : allActive;
-  const resolvedByMode = filterMode === "mine" && currentUid
+  const resolvedByMode = effectiveFilterMode === "mine" && currentUid
     ? allResolved.filter((i) => i.submitted_by_uid === currentUid)
     : allResolved;
 
-  const activeIncidents = categoryFilter === "all"
-    ? activeByMode
-    : activeByMode.filter((i) => i.pollutant_type === categoryFilter);
-  const resolvedIncidents = categoryFilter === "all"
-    ? resolvedByMode
-    : resolvedByMode.filter((i) => i.pollutant_type === categoryFilter);
+  // Category filter is citizen-only and ignored in sensor mode
+  const activeIncidents = (sourceFilter === "sensor") ? [] :
+    categoryFilter === "all"
+      ? activeByMode
+      : activeByMode.filter((i) => i.pollutant_type === categoryFilter);
+  const resolvedIncidents = (sourceFilter === "sensor") ? [] :
+    categoryFilter === "all"
+      ? resolvedByMode
+      : resolvedByMode.filter((i) => i.pollutant_type === categoryFilter);
 
   // Trigger a fly + popup open from the sidebar list
   function handleSelectIncident(incident) {
@@ -341,38 +441,88 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident, isAuthority }) 
           </div>
         )}
 
-        <div className="sidebar-top-bar">
-          <button
-            className="refresh-btn"
-            onClick={fetchIncidents}
-            disabled={loading}
-          >
-            <RefreshCw size={12} className="refresh-icon" />
-            {loading ? "Loading…" : "Refresh"}
-          </button>
-          {!isAuthority && (
-            <div className="filter-toggle">
-              <button
-                className={`filter-toggle-btn ${filterMode === "all" ? "active" : ""}`}
-                onClick={() => setFilterMode("all")}
-              >
-                All
-              </button>
-              <button
-                className={`filter-toggle-btn ${filterMode === "mine" ? "active" : ""}`}
-                onClick={() => setFilterMode("mine")}
-                disabled={!currentUid}
-              >
-                Mine
-              </button>
-            </div>
-          )}
+        {/* ── Source-type filter (Citizen / Sensor / Both) — sits above refresh row ── */}
+        <div className="source-filter-row">
+          <div className="filter-toggle source-toggle">
+            <button
+              className={`filter-toggle-btn ${sourceFilter === "citizen" ? "active" : ""}`}
+              onClick={() => setSourceFilter("citizen")}
+            >
+              <User size={11} style={{ marginRight: 3 }} />
+              Citizen
+            </button>
+            <button
+              className={`filter-toggle-btn ${sourceFilter === "sensor" ? "active" : ""}`}
+              onClick={() => setSourceFilter("sensor")}
+            >
+              <Building2 size={11} style={{ marginRight: 3 }} />
+              Sensor
+            </button>
+            <button
+              className={`filter-toggle-btn ${sourceFilter === "both" ? "active" : ""}`}
+              onClick={() => setSourceFilter("both")}
+            >
+              Both
+            </button>
+          </div>
         </div>
 
-        {/* ── Category filter ── */}
-        <div className="category-filter-row">
-          <CategoryDropdown value={categoryFilter} onChange={setCategoryFilter} />
-        </div>
+        {/* ── Refresh / All-Mine row — content depends on active source mode ── */}
+        {sourceFilter !== "sensor" && (
+          <div className="sidebar-top-bar">
+            {/* ─ Citizen mode: standard Refresh button ─ */}
+            <button
+              className="refresh-btn"
+              onClick={fetchIncidents}
+              disabled={loading}
+            >
+              <RefreshCw size={12} className="refresh-icon" />
+              {loading ? "Loading…" : "Refresh Reports"}
+            </button>
+
+            {/* ─ All/Mine toggle: hidden entirely in Sensor-only mode ─ */}
+            {!isAuthority && (
+              <div className="filter-toggle">
+                <button
+                  className={`filter-toggle-btn ${effectiveFilterMode === "all" ? "active" : ""}`}
+                  onClick={() => setFilterMode("all")}
+                >
+                  All
+                </button>
+                <button
+                  className={`filter-toggle-btn ${effectiveFilterMode === "mine" ? "active" : ""}`}
+                  onClick={() => setFilterMode("mine")}
+                  disabled={!currentUid}
+                >
+                  Mine
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ─ Sensor / Both mode: Refresh Sensors button is on its own row ─ */}
+        {sourceFilter !== "citizen" && (
+          <div className="sidebar-top-bar" style={sourceFilter === "both" ? { borderTop: "none", paddingTop: 0 } : {}}>
+            <button
+              className="refresh-btn"
+              style={{ width: sourceFilter === "both" ? "100%" : "auto", justifyContent: "center" }}
+              onClick={refreshSensors}
+              disabled={refreshingSensors || loading}
+              title="POST /admin/refresh-sensors then reload"
+            >
+              <RefreshCw size={12} className="refresh-icon" />
+              {refreshingSensors ? "Refreshing…" : "Refresh Sensors"}
+            </button>
+          </div>
+        )}
+
+        {/* ── Category filter — shown in Citizen and Both modes, hidden in Sensor-only ── */}
+        {sourceFilter !== "sensor" && (
+          <div className="category-filter-row">
+            <CategoryDropdown value={categoryFilter} onChange={setCategoryFilter} />
+          </div>
+        )}
 
         {/* ── Error Toast ── */}
         {error && (
@@ -387,114 +537,232 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident, isAuthority }) 
         {/* Scrollable incident list */}
         <div className="incident-list-container">
 
-          {/* Active incidents — collapsible */}
-          <div className="collapsible-section">
-            <button
-              className="collapsible-header"
-              onClick={() => setActiveOpen((o) => !o)}
-            >
-              <div className="collapsible-header-left">
-                Active
-                <span className={`collapsible-count ${activeIncidents.length > 0 ? "has-active" : ""}`}>
-                  {activeIncidents.length}
-                </span>
+          {/* ── Citizen sections: Active & Resolved ── */}
+          {sourceFilter !== "sensor" && (
+            <>
+              {/* Active incidents — collapsible */}
+              <div className="collapsible-section">
+                <button
+                  className="collapsible-header"
+                  onClick={() => setActiveOpen((o) => !o)}
+                >
+                  <div className="collapsible-header-left">
+                    Active
+                    <span className={`collapsible-count ${activeIncidents.length > 0 ? "has-active" : ""}`}>
+                      {activeIncidents.length}
+                    </span>
+                  </div>
+                  <span className={`collapsible-chevron ${activeOpen ? "open" : ""}`}>▼</span>
+                </button>
+                <div className={`collapsible-body ${activeOpen ? "open" : ""}`}>
+                  {activeIncidents.length === 0 ? (
+                    <div className="incident-empty">No active incidents</div>
+                  ) : (
+                    activeIncidents.map((incident) => (
+                      <button
+                        key={incident.incident_id}
+                        className="incident-item"
+                        onClick={() => handleSelectIncident(incident)}
+                      >
+                        <span
+                          className="incident-sev-dot"
+                          style={{ background: SEVERITY_COLORS[incident.severity_score] || "#888" }}
+                        />
+                        <div className="incident-item-content">
+                          <div className="incident-item-type">
+                            Sev {incident.severity_score} · {incident.pollutant_type}
+                            {currentUid && incident.submitted_by_uid === currentUid && (
+                              <span className="incident-yours-badge">Yours</span>
+                            )}
+                          </div>
+                          <div className="incident-item-summary">{incident.summary}</div>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
               </div>
-              <span className={`collapsible-chevron ${activeOpen ? "open" : ""}`}>▼</span>
-            </button>
-            <div className={`collapsible-body ${activeOpen ? "open" : ""}`}>
-              {activeIncidents.length === 0 ? (
-                <div className="incident-empty">No active incidents</div>
-              ) : (
-                activeIncidents.map((incident) => (
-                  <button
-                    key={incident.incident_id}
-                    className="incident-item"
-                    onClick={() => handleSelectIncident(incident)}
-                  >
-                    <span
-                      className="incident-sev-dot"
-                      style={{ background: SEVERITY_COLORS[incident.severity_score] || "#888" }}
-                    />
-                    <div className="incident-item-content">
-                      <div className="incident-item-type">
-                        Sev {incident.severity_score} · {incident.pollutant_type}
-                        {currentUid && incident.submitted_by_uid === currentUid && (
-                          <span className="incident-yours-badge">Yours</span>
-                        )}
-                      </div>
-                      <div className="incident-item-summary">{incident.summary}</div>
-                    </div>
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
 
-          {/* Resolved incidents — collapsible, collapsed by default */}
-          <div className="collapsible-section">
-            <button
-              className="collapsible-header"
-              onClick={() => setResolvedOpen((o) => !o)}
-            >
-              <div className="collapsible-header-left">
-                Resolved
-                <span className={`collapsible-count ${resolvedIncidents.length > 0 ? "has-resolved" : ""}`}>
-                  {resolvedIncidents.length}
-                </span>
+              {/* Resolved incidents — collapsible, collapsed by default */}
+              <div className="collapsible-section">
+                <button
+                  className="collapsible-header"
+                  onClick={() => setResolvedOpen((o) => !o)}
+                >
+                  <div className="collapsible-header-left">
+                    Resolved
+                    <span className={`collapsible-count ${resolvedIncidents.length > 0 ? "has-resolved" : ""}`}>
+                      {resolvedIncidents.length}
+                    </span>
+                  </div>
+                  <span className={`collapsible-chevron ${resolvedOpen ? "open" : ""}`}>▼</span>
+                </button>
+                <div className={`collapsible-body ${resolvedOpen ? "open" : ""}`}>
+                  {resolvedIncidents.length === 0 ? (
+                    <div className="incident-empty">No resolved incidents</div>
+                  ) : (
+                    resolvedIncidents.map((incident) => (
+                      <button
+                        key={incident.incident_id}
+                        className="incident-item"
+                        onClick={() => handleSelectIncident(incident)}
+                      >
+                        <span className="incident-sev-dot" style={{ background: RESOLVED_GREEN }} />
+                        <div className="incident-item-content">
+                          <div className="incident-item-type">
+                            {incident.pollutant_type}
+                            {currentUid && incident.submitted_by_uid === currentUid && (
+                              <span className="incident-yours-badge">Yours</span>
+                            )}
+                          </div>
+                          <div className="incident-item-summary">{incident.summary}</div>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
               </div>
-              <span className={`collapsible-chevron ${resolvedOpen ? "open" : ""}`}>▼</span>
-            </button>
-            <div className={`collapsible-body ${resolvedOpen ? "open" : ""}`}>
-              {resolvedIncidents.length === 0 ? (
-                <div className="incident-empty">No resolved incidents</div>
-              ) : (
-                resolvedIncidents.map((incident) => (
-                  <button
-                    key={incident.incident_id}
-                    className="incident-item"
-                    onClick={() => handleSelectIncident(incident)}
-                  >
-                    <span className="incident-sev-dot" style={{ background: RESOLVED_GREEN }} />
-                    <div className="incident-item-content">
-                      <div className="incident-item-type">
-                        {incident.pollutant_type}
-                        {currentUid && incident.submitted_by_uid === currentUid && (
-                          <span className="incident-yours-badge">Yours</span>
-                        )}
-                      </div>
-                      <div className="incident-item-summary">{incident.summary}</div>
-                    </div>
-                  </button>
-                ))
-              )}
+            </>
+          )}
+
+          {/* ── Sensor station list — shown in Sensor or Both mode ── */}
+          {sourceFilter !== "citizen" && (
+            <div className="collapsible-section">
+              <button
+                className="collapsible-header"
+                onClick={() => setSensorOpen((o) => !o)}
+              >
+                <div className="collapsible-header-left">
+                  <Building2 size={12} style={{ marginRight: 4, opacity: 0.7 }} />
+                  Sensor Stations
+                  <span className={`collapsible-count ${sensorIncidents.length > 0 ? "has-active" : ""}`}>
+                    {sensorIncidents.length}
+                  </span>
+                </div>
+                <span className={`collapsible-chevron ${sensorOpen ? "open" : ""}`}>▼</span>
+              </button>
+              <div className={`collapsible-body ${sensorOpen ? "open" : ""}`}>
+                {sensorIncidents.length === 0 ? (
+                  <div className="incident-empty">No sensor data</div>
+                ) : (
+                  sensorIncidents.map((incident) => {
+                    const bucket = getSensorSeverity(incident.pollutants);
+                    const worstEntry = incident.pollutants
+                      ? Object.entries(incident.pollutants).reduce((best, [key, data]) => {
+                        if (!data || !data.threshold) return best;
+                        const ratio = data.value / data.threshold;
+                        return (!best || ratio > best.ratio) ? { key, data, ratio } : best;
+                      }, null)
+                      : null;
+                    return (
+                      <button
+                        key={incident.incident_id}
+                        className="incident-item"
+                        onClick={() => handleSelectIncident(incident)}
+                      >
+                        {/* Diamond shape indicator */}
+                        <span
+                          className="incident-sev-dot sensor-dot"
+                          style={{
+                            background: SEVERITY_COLORS[bucket] || "#888",
+                            transform: "rotate(45deg)",
+                            borderRadius: 2,
+                            width: 10,
+                            height: 10,
+                            flexShrink: 0,
+                          }}
+                        />
+                        <div className="incident-item-content">
+                          <div className="incident-item-type" style={{ fontSize: 12 }}>
+                            {incident.station_name}
+                          </div>
+                          <div className="incident-item-summary">
+                            {worstEntry
+                              ? `${worstEntry.key === "pm25" ? "PM2.5" : worstEntry.key === "pm10" ? "PM10" : worstEntry.key.toUpperCase()}: ${worstEntry.data.value.toFixed(1)
+                              } µg/m³ ${worstEntry.data.elevated ? "⚠ elevated" : ""}`
+                              : "No pollutant data"}
+                          </div>
+                          <div className="incident-item-summary" style={{ color: "var(--text-secondary)", marginTop: 2 }}>
+                            {incident.last_updated
+                              ? formatRelativeTime(incident.last_updated)
+                              : ""}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
         </div>
 
-        {/* Legend — pinned at bottom */}
-        <div className="map-legend">
-          <div className="legend-label">Severity Scale</div>
-          <div className="legend-items">
-            {[1, 2, 3, 4, 5].map((level) => (
-              <div className="legend-item" key={level}>
-                <span className="legend-swatch" style={{ background: SEVERITY_COLORS[level] }} />
-                Level {level}
-                {level === 1 && " — Minimal"}
-                {level === 3 && " — Moderate"}
-                {level === 5 && " — Critical"}
-              </div>
-            ))}
-            <div className="legend-item" style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--border-subtle)" }}>
-              <span className="legend-swatch" style={{ background: RESOLVED_GREEN }} />
-              Resolved
-            </div>
-          </div>
-        </div>
       </aside>
 
       {/* ── Map ── */}
       <div className="map-area">
+        {/* Floating Legend Overlay */}
+        <div className={`floating-legend-container ${legendExpanded ? "expanded" : ""}`} ref={legendRef}>
+          <button className="floating-legend-toggle" onClick={() => setLegendExpanded((prev) => !prev)}>
+            <span>Severity Scale</span>
+            <span className="floating-legend-chevron">▼</span>
+          </button>
+          
+          <div className="floating-legend-panel">
+            <div className="legend-items">
+              {[1, 2, 3, 4, 5].map((level) => (
+                <div className="legend-item" key={level}>
+                  <span className="legend-swatch" style={{ background: SEVERITY_COLORS[level] }} />
+                  Level {level}
+                  {level === 1 && " — Minimal"}
+                  {level === 3 && " — Moderate"}
+                  {level === 5 && " — Critical"}
+                </div>
+              ))}
+              {/* Shape key */}
+              <div
+                className="legend-item"
+                style={{
+                  marginTop: 5,
+                  paddingTop: 5,
+                  borderTop: "1px solid var(--border-subtle)",
+                  color: "var(--text-secondary)",
+                  fontSize: "9px",
+                  lineHeight: 1.4,
+                }}
+              >
+                ● Circle = citizen&nbsp;&nbsp;◆ Diamond = sensor
+              </div>
+              {/* Resolved */}
+              <div
+                className="legend-item"
+                style={{ marginTop: 5, paddingTop: 5, borderTop: "1px solid var(--border-subtle)" }}
+              >
+                <span
+                  className="legend-swatch"
+                  style={{
+                    background: RESOLVED_GREEN,
+                    borderRadius: "50%",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "#fff",
+                    fontSize: 8,
+                    fontWeight: 700,
+                    width: "10px",
+                    height: "10px",
+                    lineHeight: "10px",
+                    flexShrink: 0,
+                  }}
+                >
+                  ✓
+                </span>
+                Resolved (citizen)
+              </div>
+            </div>
+          </div>
+        </div>
         <MapContainer
           center={mapCenter}
           zoom={12}
@@ -509,8 +777,23 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident, isAuthority }) 
             attribution="&copy; OpenStreetMap contributors"
           />
 
-          {incidents.map((incident) =>
-            incident.status === "RESOLVED" ? (
+          {visibleOnMap.map((incident) =>
+            // SENSOR incidents get a diamond-shaped divIcon
+            incident.source_type === "SENSOR" ? (
+              <Marker
+                key={incident.incident_id}
+                position={[incident.location.lat, incident.location.lng]}
+                icon={sensorIcon(getSensorSeverity(incident.pollutants))}
+                ref={(ref) => {
+                  if (ref) markerRefs.current[incident.incident_id] = ref;
+                  else delete markerRefs.current[incident.incident_id];
+                }}
+              >
+                <Popup>
+                  <SensorPopupContent incident={incident} />
+                </Popup>
+              </Marker>
+            ) : incident.status === "RESOLVED" ? (
               <Marker
                 key={incident.incident_id}
                 position={[incident.location.lat, incident.location.lng]}
@@ -568,7 +851,7 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident, isAuthority }) 
                 }}
               >
                 <Popup>
-                  <ActiveIncidentPopupContent 
+                  <ActiveIncidentPopupContent
                     incident={incident}
                     resolvingId={resolvingId}
                     onResolve={resolveIncident}
@@ -586,6 +869,89 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident, isAuthority }) 
   );
 }
 
+// ── Utility: format an ISO timestamp as a relative "Updated X ago" string ──
+function formatRelativeTime(isoString) {
+  try {
+    const diff = Math.floor((Date.now() - new Date(isoString).getTime()) / 1000);
+    if (diff < 60) return `Updated ${diff}s ago`;
+    if (diff < 3600) return `Updated ${Math.floor(diff / 60)} min ago`;
+    if (diff < 86400) return `Updated ${Math.floor(diff / 3600)}h ago`;
+    return `Updated ${Math.floor(diff / 86400)}d ago`;
+  } catch {
+    return "";
+  }
+}
+
+// ── SensorPopupContent ──────────────────────────────────────────────────────
+// Dedicated popup for SENSOR-sourced incidents. Does NOT reuse
+// ActiveIncidentPopupContent; corroboration chrome is citizen-only.
+function SensorPopupContent({ incident }) {
+  const { station_name, pollutants, last_updated } = incident;
+
+  return (
+    <div className="popup-card sensor-popup-card">
+      <div className="popup-top">
+        <div className="popup-badge-row">
+          <span
+            className="popup-badge"
+            style={{
+              background: "var(--surface-2)",
+              color: "var(--text-secondary)",
+              border: "1px solid var(--border-subtle)",
+            }}
+          >
+            <Building2 size={10} style={{ marginRight: 3, verticalAlign: "middle" }} />
+            Air Quality Sensor
+          </span>
+        </div>
+        <h3 className="popup-heading" style={{ marginTop: 6, fontSize: 13 }}>
+          {station_name}
+        </h3>
+      </div>
+
+      {pollutants && Object.keys(pollutants).length > 0 && (
+        <div className="popup-mid" style={{ paddingTop: 8 }}>
+          <ul className="sensor-pollutant-list">
+            {Object.entries(pollutants).map(([key, data]) => {
+              if (!data) return null;
+              const label =
+                key === "pm25" ? "PM2.5" :
+                  key === "pm10" ? "PM10" :
+                    key.toUpperCase();
+              return (
+                <li key={key} className="sensor-pollutant-item">
+                  <span className="sensor-pollutant-name">{label}</span>
+                  <span
+                    className={`sensor-pollutant-value ${data.elevated ? "elevated" : "normal"}`}
+                  >
+                    {data.value != null ? `${data.value.toFixed(2)} µg/m³` : "—"}
+                  </span>
+                  {data.threshold != null && (
+                    <span className="sensor-pollutant-threshold">
+                      / {data.threshold} limit
+                    </span>
+                  )}
+                  <span
+                    className={`sensor-pollutant-status ${data.elevated ? "elevated" : "normal"}`}
+                  >
+                    {data.elevated ? "⚠ elevated" : "✓ normal"}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      {last_updated && (
+        <div className="popup-bottom" style={{ paddingTop: 6, borderTop: "1px solid var(--border-subtle)", fontSize: 11, color: "var(--text-secondary)" }}>
+          {formatRelativeTime(last_updated)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ConfidenceCorroboration({ score, basis }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -595,8 +961,8 @@ function ConfidenceCorroboration({ score, basis }) {
     basis?.reason === "elevated_corroborated"
       ? "Nearby sensor confirms elevated pollution"
       : basis?.reason === "not_elevated"
-      ? "Nearby sensor doesn't currently show elevated readings — uncorroborated, not disproven"
-      : null;
+        ? "Nearby sensor doesn't currently show elevated readings — uncorroborated, not disproven"
+        : null;
 
   const pollutants = basis?.pollutants;
   const hasPollutants = pollutants && Object.keys(pollutants).length > 0;

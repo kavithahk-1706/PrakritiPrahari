@@ -1373,7 +1373,7 @@ body {
 }
 
 .sidebar-header {
-  padding: var(--s5) var(--s5);
+  padding: var(--s3) var(--s5);
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
 }
@@ -1395,7 +1395,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--s4) var(--s5);
+  padding: var(--s2) var(--s5);
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
   gap: var(--s2);
@@ -1451,13 +1451,13 @@ body {
   display: flex;
   align-items: center;
   gap: var(--s1);
-  padding: 6px 12px;
+  padding: 5px 8px;
   background: var(--surface-2);
   border: 1px solid var(--border-default);
   border-radius: var(--r-sm);
   color: var(--text-secondary);
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   cursor: pointer;
   transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
@@ -1532,7 +1532,7 @@ body {
 
 /* Category dropdown filter — custom component (.catdd) */
 .category-filter-row {
-  padding: var(--s3) var(--s5);
+  padding: var(--s1) var(--s5);
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
 }
@@ -1550,13 +1550,13 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: var(--s2);
-  padding: 8px 12px;
+  padding: 5px 10px;
   background: var(--surface-2);
   border: 1px solid var(--border-default);
   border-radius: var(--r-sm);
   color: var(--text-secondary);
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   cursor: pointer;
   text-align: left;
@@ -1916,20 +1916,69 @@ body {
   color: var(--text-tertiary);
 }
 
-/* Legend — pinned at bottom of sidebar */
-.map-legend {
-  padding: var(--s4) var(--s5);
-  border-top: 1px solid var(--border-subtle);
-  flex-shrink: 0;
+/* Floating Legend Overlay */
+.floating-legend-container {
+  position: absolute;
+  bottom: 25px;
+  right: 20px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
 }
 
-.legend-label {
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  color: var(--text-tertiary);
-  margin-bottom: var(--s3);
+.floating-legend-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: 6px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-pill);
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: all var(--dur-fast) var(--ease);
+}
+
+.floating-legend-toggle:hover {
+  background: var(--surface-3);
+  color: var(--text-primary);
+  border-color: var(--border-default);
+}
+
+.floating-legend-chevron {
+  font-size: 9px;
+  transition: transform var(--dur-fast) var(--ease);
+}
+
+.floating-legend-container.expanded .floating-legend-chevron {
+  transform: rotate(180deg);
+}
+
+.floating-legend-panel {
+  position: absolute;
+  bottom: calc(100% + var(--s2));
+  right: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-sm);
+  padding: var(--s4) var(--s5);
+  box-shadow: var(--shadow-md);
+  width: max-content;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(10px);
+  transition: all var(--dur-fast) var(--ease);
+}
+
+.floating-legend-container.expanded .floating-legend-panel {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
 }
 
 .legend-items {
@@ -2278,6 +2327,96 @@ body {
   line-height: 1.5;
   margin: var(--s1) 0 0;
   font-style: italic;
+}
+
+/* ============================================================
+   SOURCE-TYPE FILTER  (Citizen / Sensor / Both toggle)
+   ============================================================ */
+.source-filter-row {
+  padding: var(--s2) var(--s5);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+/* Three-button source toggle — reuses the same .filter-toggle/.filter-toggle-btn
+   classes as the All/Mine toggle; only layout adjustment needed */
+.source-toggle {
+  width: 100%;
+}
+
+.source-toggle .filter-toggle-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ============================================================
+   SENSOR POPUP  (.sensor-popup-card)
+   ============================================================ */
+
+/* Sensor popup card — inherits .popup-card base, minor overrides */
+.sensor-popup-card .popup-heading {
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* Pollutant list inside sensor popup */
+.sensor-pollutant-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sensor-pollutant-item {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+
+.sensor-pollutant-name {
+  font-family: var(--font-ui);
+  font-weight: 700;
+  color: var(--text-primary);
+  min-width: 38px;
+  flex-shrink: 0;
+}
+
+.sensor-pollutant-value {
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.sensor-pollutant-value.elevated {
+  color: var(--sev-4, #d9702f);
+}
+
+.sensor-pollutant-value.normal {
+  color: var(--text-primary);
+}
+
+.sensor-pollutant-threshold {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.sensor-pollutant-status {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.sensor-pollutant-status.elevated {
+  color: var(--sev-4, #d9702f);
+}
+
+.sensor-pollutant-status.normal {
+  color: var(--green-400, #3fae5c);
 }
 
 /* ============================================================

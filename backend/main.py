@@ -15,6 +15,7 @@ import os
 import time
 import math
 import uuid
+import asyncio
 from datetime import datetime, timezone
 from typing import Optional
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Header
@@ -29,6 +30,7 @@ import cloudinary.uploader
 import anyio
 from fastapi.middleware.cors import CORSMiddleware
 from cpcb import is_airborne, get_nearby_pm_reading, get_cpcb_corroboration
+from sensors import sensor_refresh_loop, refresh_all_sensors
 
 
 load_dotenv()
@@ -313,6 +315,16 @@ async def verify_token(authorization: Optional[str] = Header(None)) -> dict:
     }
 
 # ------- 3. endpoints -------
+
+@app.on_event("startup")
+async def start_sensor_loop():
+    asyncio.create_task(sensor_refresh_loop(db))
+
+
+@app.post("/admin/refresh-sensors")
+async def manual_refresh_sensors():
+    updated = refresh_all_sensors(db)
+    return {"updated": updated}
 
 @app.post("/report")
 async def submit_report(
