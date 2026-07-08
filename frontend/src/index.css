@@ -1334,7 +1334,7 @@ body {
    ============================================================ */
 .map-layout {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 340px 1fr;
   height: calc(100dvh - 58px);
   width: 100%;
   overflow: hidden;
@@ -1355,8 +1355,25 @@ body {
   height: 100%;
 }
 
+.sidebar-resizer {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 1000;
+  background: transparent;
+  transition: background var(--dur-fast) var(--ease);
+}
+
+.sidebar-resizer:hover,
+.sidebar-resizer:active {
+  background: rgba(255, 195, 130, 0.12);
+}
+
 .sidebar-header {
-  padding: var(--s4) var(--s5);
+  padding: var(--s5) var(--s5);
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
 }
@@ -1378,7 +1395,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--s3) var(--s4);
+  padding: var(--s4) var(--s5);
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
   gap: var(--s2);
@@ -1513,49 +1530,160 @@ body {
   cursor: not-allowed;
 }
 
-/* Category dropdown filter */
+/* Category dropdown filter — custom component (.catdd) */
 .category-filter-row {
-  padding: var(--s2) var(--s4);
+  padding: var(--s3) var(--s5);
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
 }
 
-.category-filter-select {
+/* Wrapper — establishes the positioning context for the panel */
+.catdd {
+  position: relative;
   width: 100%;
-  appearance: none;
-  -webkit-appearance: none;
-  padding: 5px 28px 5px 10px;
-  background: var(--surface-2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%239a8e82'/%3E%3C/svg%3E") no-repeat right 10px center;
+}
+
+/* Trigger button — mirrors .refresh-btn aesthetics */
+.catdd-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+  padding: 8px 12px;
+  background: var(--surface-2);
   border: 1px solid var(--border-default);
   border-radius: var(--r-sm);
   color: var(--text-secondary);
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  outline: none;
-  transition: border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease);
+  text-align: left;
+  transition: border-color var(--dur-fast) var(--ease),
+              color var(--dur-fast) var(--ease),
+              background var(--dur-fast) var(--ease);
+}
+
+.catdd-trigger:hover,
+.catdd-trigger.open {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  background: var(--surface-3);
+}
+
+/* Highlight trigger when a non-default value is chosen */
+.catdd-trigger.has-value {
+  border-color: var(--green-700);
+  color: var(--green-300);
+}
+
+.catdd-trigger.has-value:hover {
+  border-color: var(--green-500);
+}
+
+.catdd-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catdd-chevron {
+  flex-shrink: 0;
+  transition: transform var(--dur-fast) var(--ease);
+}
+
+.catdd-chevron.open {
+  transform: rotate(180deg);
+}
+
+/* Floating options panel */
+.catdd-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  background: var(--surface-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  overflow-y: auto;
+  max-height: 320px;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  gap: 4px;
+  
+  /* Modern standard scrollbar styling */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+/* WebKit-based browsers scrollbar styling */
+.catdd-panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+.catdd-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.catdd-panel::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--r-pill);
+}
+
+.catdd-panel::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+/* Individual option buttons */
+.catdd-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  border-radius: var(--r-sm);
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.category-filter-select:hover {
-  border-color: var(--border-strong);
+.catdd-option:hover {
+  background: var(--surface-3);
   color: var(--text-primary);
 }
 
-.category-filter-select:focus {
-  border-color: var(--green-700);
-  color: var(--text-primary);
-  box-shadow: 0 0 0 2px rgba(34, 168, 90, 0.12);
+/* Active / selected option — matches filter-toggle-btn.active green */
+.catdd-option.active {
+  background: rgba(22, 94, 56, 0.35);
+  color: var(--green-300);
+  font-weight: 700;
 }
 
-.category-filter-select option {
-  background: var(--surface-2);
-  color: var(--text-primary);
-  font-family: var(--font-ui);
+.catdd-option.active:hover {
+  background: rgba(22, 94, 56, 0.5);
+}
+
+/* Check mark glyph inside active option */
+.catdd-check {
+  flex-shrink: 0;
   font-size: 11px;
+  color: var(--green-400);
+  line-height: 1;
+  width: 12px;
 }
 
 /* "Yours" badge inline with incident type */
@@ -1657,7 +1785,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--s3) var(--s4);
+  padding: var(--s4) var(--s5);
   cursor: pointer;
   background: none;
   border: none;
@@ -1731,7 +1859,7 @@ body {
   display: flex;
   align-items: flex-start;
   gap: var(--s2);
-  padding: 10px var(--s4);
+  padding: var(--s3) var(--s5);
   cursor: pointer;
   border: none;
   background: none;
@@ -1768,7 +1896,7 @@ body {
   color: var(--text-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  margin-bottom: 2px;
+  margin-bottom: 4px;
 }
 
 .incident-item-summary {
@@ -2186,6 +2314,10 @@ body {
   .map-sidebar.mobile-open {
     left: 0;
     box-shadow: var(--shadow-lg);
+  }
+
+  .sidebar-resizer {
+    display: none !important;
   }
 
   .mobile-sidebar-overlay {

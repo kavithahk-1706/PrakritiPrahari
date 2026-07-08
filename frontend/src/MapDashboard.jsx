@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { MapContainer, TileLayer, CircleMarker, Marker, Popup, useMap } from "react-leaflet";
-import { RefreshCw, Zap, User, Building2, CheckCircle2, Menu, X } from "lucide-react";
+import { RefreshCw, Zap, User, Building2, CheckCircle2, Menu, X, ChevronDown } from "lucide-react";
 import L from "leaflet";
 import { getIdToken, auth } from "./firebase";
 
@@ -25,6 +25,56 @@ const POLLUTANT_TYPES = [
   "Stagnant Water / Mosquito Breeding",
   "Other",
 ];
+
+function CategoryDropdown({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef(null);
+
+  const label = value === "all" ? "All categories" : value;
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    function handleOutside(e) {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, [open]);
+
+  const ALL_OPTIONS = [{ value: "all", label: "All categories" }, ...POLLUTANT_TYPES.map((t) => ({ value: t, label: t }))];
+
+  return (
+    <div className="catdd" ref={containerRef}>
+      <button
+        className={`catdd-trigger ${open ? "open" : ""} ${value !== "all" ? "has-value" : ""}`}
+        onClick={() => setOpen((o) => !o)}
+        type="button"
+      >
+        <span className="catdd-label">{label}</span>
+        <ChevronDown size={11} className={`catdd-chevron ${open ? "open" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="catdd-panel">
+          {ALL_OPTIONS.map(({ value: v, label: l }) => (
+            <button
+              key={v}
+              type="button"
+              className={`catdd-option ${value === v ? "active" : ""}`}
+              onClick={() => { onChange(v); setOpen(false); }}
+            >
+              {value === v && <span className="catdd-check">✓</span>}
+              {l}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // severity 1-5 mapped to color - matches the legend and pin fill
 const SEVERITY_COLORS = {
@@ -83,6 +133,10 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident, isAuthority }) 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [resolvingId, setResolvingId] = useState(null);
+
+  // Resizable sidebar state (defaulting to the current 340px)
+  const [sidebarWidth, setSidebarWidth] = useState(340);
+  const [isDragging, setIsDragging] = useState(false);
 
   // Sidebar collapsible state
   const [activeOpen, setActiveOpen] = useState(true);
@@ -157,6 +211,25 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident, isAuthority }) 
     fetchIncidents();
   }, []);
 
+  // Handle sidebar resize dragging
+  useEffect(() => {
+    if (!isDragging) return;
+    function handleMouseMove(e) {
+      // Clamp between 240px and 500px
+      const newWidth = Math.max(240, Math.min(500, e.clientX));
+      setSidebarWidth(newWidth);
+    }
+    function handleMouseUp() {
+      setIsDragging(false);
+    }
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isDragging]);
+
   // Auto-dismiss error toast after 4 seconds
   useEffect(() => {
     if (!error) return;
@@ -211,7 +284,7 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident, isAuthority }) 
   }, [focusedIncidentId, incidents]);
 
   return (
-    <div className="map-layout">
+    <div className="map-layout" style={{ gridTemplateColumns: `${sidebarWidth}px 1fr` }}>
       {/* ── Mobile Sidebar Toggle ── */}
       <button
         className="mobile-sidebar-toggle"
@@ -227,7 +300,15 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident, isAuthority }) 
       />
 
       {/* ── Sidebar ── */}
-      <aside className={`map-sidebar ${mobileSidebarOpen ? "mobile-open" : ""}`}>
+      <aside className={`map-sidebar ${mobileSidebarOpen ? "mobile-open" : ""}`} style={{ position: "relative" }}>
+        {/* Resize handle */}
+        <div
+          className="sidebar-resizer"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            setIsDragging(true);
+          }}
+        />
         <div className="sidebar-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
             <div className="sidebar-title">Live Incident Map</div>
@@ -290,16 +371,7 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident, isAuthority }) 
 
         {/* ── Category filter ── */}
         <div className="category-filter-row">
-          <select
-            className="category-filter-select"
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-          >
-            <option value="all">All categories</option>
-            {POLLUTANT_TYPES.map((type) => (
-              <option key={type} value={type}>{type}</option>
-            ))}
-          </select>
+          <CategoryDropdown value={categoryFilter} onChange={setCategoryFilter} />
         </div>
 
         {/* ── Error Toast ── */}
