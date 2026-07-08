@@ -11,8 +11,11 @@ const firebaseConfig = {
     measurementId: "G-J40MVKZWHY"
 };
 
+import { getFirestore } from "firebase/firestore";
+
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+const db = getFirestore(app);
 
 // Ensures every visitor has a signed-in (anonymous) identity before they
 // can submit or resolve a report. Citizens never see this happen.
@@ -48,4 +51,4 @@ export async function signOutAuthority() {
     await ensureSignedIn();
 }
 
-export { auth, onAuthStateChanged };
+export { auth, db, onAuthStateChanged };

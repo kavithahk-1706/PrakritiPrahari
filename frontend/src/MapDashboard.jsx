@@ -94,15 +94,19 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident, isAuthority }) 
     }
   }
 
-  async function resolveIncident(incidentId) {
+  async function resolveIncident(incidentId, note) {
     setResolvingId(incidentId);
     try {
       const token = await getIdToken();
+      const formData = new FormData();
+      if (note) formData.append("resolution_note", note);
+
       const response = await fetch(
         `${API_BASE}/incidents/${incidentId}/resolve`,
         {
           method: "PATCH",
           headers: { Authorization: `Bearer ${token}` },
+          body: formData,
         }
       );
 
@@ -116,7 +120,7 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident, isAuthority }) 
       setIncidents((prev) =>
         prev.map((incident) =>
           incident.incident_id === incidentId
-            ? { ...incident, status: "RESOLVED", resolved_by: data.resolved_by }
+            ? { ...incident, status: "RESOLVED", resolved_by: data.resolved_by, resolution_note: data.resolution_note }
             : incident
         )
       );
@@ -422,6 +426,12 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident, isAuthority }) 
                         <CheckCircle2 size={13} color={RESOLVED_GREEN} />
                         Resolved by {incident.resolved_by}
                       </div>
+                      {incident.resolution_note && (
+                        <div className="popup-action-row" style={{ marginTop: 8, alignItems: "flex-start" }}>
+                          <span className="popup-action-text" style={{ fontWeight: 600, flexShrink: 0 }}>Note:</span>
+                          <span className="popup-action-text">{incident.resolution_note}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </Popup>
@@ -443,48 +453,122 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident, isAuthority }) 
                 }}
               >
                 <Popup>
-                  <div className="popup-card">
-                    <div className="popup-top">
-                      <div className="popup-badge-row">
-                        <span
-                          className="popup-badge"
-                          style={{ background: SEVERITY_COLORS[incident.severity_score] || "#888" }}
-                        >
-                          Sev {incident.severity_score}
-                        </span>
-                        <span className="popup-pollutant">{incident.pollutant_type}</span>
-                      </div>
-                      <h3 className="popup-heading">{incident.summary}</h3>
-                      {incident.location_address && (
-                        <p className="popup-action-text" style={{ marginTop: 4 }}>
-                          {incident.location_address}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="popup-mid">
-                      <div className="popup-action-row">
-                        <Zap size={13} className="popup-action-icon" color="var(--amber-400)" />
-                        <span className="popup-action-text">{incident.recommended_action}</span>
-                      </div>
-                    </div>
-
-                    <div className="popup-bottom">
-                      <button
-                        className="resolve-btn citizen"
-                        disabled={resolvingId === incident.incident_id}
-                        onClick={() => resolveIncident(incident.incident_id)}
-                      >
-                        <CheckCircle2 size={11} />
-                        Mark Resolved
-                      </button>
-                    </div>
-                  </div>
+                  <ActiveIncidentPopupContent 
+                    incident={incident}
+                    resolvingId={resolvingId}
+                    onResolve={resolveIncident}
+                    currentUid={currentUid}
+                    isAuthority={isAuthority}
+                    onError={setError}
+                  />
                 </Popup>
               </CircleMarker>
             )
           )}
         </MapContainer>
+      </div>
+    </div>
+  );
+}
+
+function ActiveIncidentPopupContent({ incident, resolvingId, onResolve, currentUid, isAuthority, onError }) {
+  const [isResolving, setIsResolving] = useState(false);
+  const [resolveNote, setResolveNote] = useState("");
+
+  return (
+    <div className="popup-card">
+      <div className="popup-top">
+        <div className="popup-badge-row">
+          <span
+            className="popup-badge"
+            style={{ background: SEVERITY_COLORS[incident.severity_score] || "#888" }}
+          >
+            Sev {incident.severity_score}
+          </span>
+          <span className="popup-pollutant">{incident.pollutant_type}</span>
+        </div>
+        <h3 className="popup-heading">{incident.summary}</h3>
+        {incident.location_address && (
+          <p className="popup-action-text" style={{ marginTop: 4 }}>
+            {incident.location_address}
+          </p>
+        )}
+      </div>
+
+      <div className="popup-mid">
+        <div className="popup-action-row">
+          <Zap size={13} className="popup-action-icon" color="var(--amber-400)" />
+          <span className="popup-action-text">{incident.recommended_action}</span>
+        </div>
+      </div>
+
+      <div className="popup-bottom">
+        {isResolving ? (
+          <div className="resolve-flow" style={{ width: "100%" }}>
+            <textarea
+              placeholder="Briefly describe how this was resolved..."
+              value={resolveNote}
+              onChange={(e) => setResolveNote(e.target.value)}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              rows={3}
+              style={{
+                width: "100%",
+                padding: "8px",
+                borderRadius: "6px",
+                border: "1px solid var(--border-default)",
+                background: "var(--surface-1)",
+                color: "var(--text-primary)",
+                fontFamily: "var(--font-body)",
+                fontSize: "13px",
+                marginBottom: "8px",
+                resize: "none"
+              }}
+            />
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button
+                className="resolve-btn"
+                style={{ flex: 1, background: "var(--surface-2)", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)" }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsResolving(false);
+                  setResolveNote("");
+                }}
+                disabled={resolvingId === incident.incident_id}
+              >
+                Cancel
+              </button>
+              <button
+                className="resolve-btn citizen"
+                style={{ flex: 1 }}
+                disabled={resolvingId === incident.incident_id || !resolveNote.trim()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onResolve(incident.incident_id, resolveNote);
+                }}
+              >
+                {resolvingId === incident.incident_id ? "Saving..." : "Confirm Resolution"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            className="resolve-btn citizen"
+            disabled={resolvingId === incident.incident_id}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!isAuthority && incident.submitted_by_uid !== currentUid) {
+                onError("You can only resolve your own reports.");
+                return;
+              }
+              setIsResolving(true);
+              setResolveNote("");
+            }}
+          >
+            <CheckCircle2 size={11} />
+            Mark Resolved
+          </button>
+        )}
       </div>
     </div>
   );

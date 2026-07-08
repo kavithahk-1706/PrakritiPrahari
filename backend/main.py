@@ -375,6 +375,7 @@ async def submit_report(
         "recommended_action": result["recommended_action"],
         "status": "ACTIVE",
         "resolved_by": None,
+        "resolution_note": None
     }
 
     db.collection("incidents").document(incident_id).set(incident)
@@ -396,7 +397,11 @@ async def list_incidents():
 
 
 @app.patch("/incidents/{incident_id}/resolve")
-async def resolve_incident(incident_id: str, user: dict = Depends(verify_token)):
+async def resolve_incident( 
+    incident_id: str, 
+    resolution_note: str = Form(...), 
+    user: dict = Depends(verify_token)
+):
     """
     Citizens can resolve their own reports. The authority account can resolve anything.
     """
@@ -415,6 +420,16 @@ async def resolve_incident(incident_id: str, user: dict = Depends(verify_token))
     else:
         raise HTTPException(status_code=403, detail="You can only resolve incidents you reported")
 
-    doc_ref.update({"status": "RESOLVED", "resolved_by": resolved_by})
+    doc_ref.update({
+        "status": "RESOLVED", 
+        "resolved_by": resolved_by,
+        "resolution_note": resolution_note
+        
+    })
 
-    return {"incident_id": incident_id, "status": "RESOLVED", "resolved_by": resolved_by}
+    return {
+        "incident_id": incident_id, 
+        "status": "RESOLVED", 
+        "resolved_by": resolved_by,
+        "resolution_note": resolution_note,
+        }

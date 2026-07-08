@@ -1,9 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import ReportForm from "./ReportForm";
 import MapDashboard from "./MapDashboard";
 import LandingPage from "./LandingPage";
 import "./index.css";
-import { ensureSignedIn, signInAsAuthority, signOutAuthority, auth, onAuthStateChanged } from "./firebase";
+import { ensureSignedIn, signInAsAuthority, signOutAuthority, auth, onAuthStateChanged, db } from "./firebase";
+import { collection, onSnapshot } from "firebase/firestore";
+import { X } from "lucide-react";
 
 function App() {
   const [activeTab, setActiveTab] = useState("home"); // "home" | "submit" | "map"
@@ -21,6 +23,42 @@ function App() {
   useEffect(() => {
     ensureSignedIn();
   }, []);
+
+  // ── Global Firestore Real-time Listener for Toasts ──
+  const [liveToast, setLiveToast] = useState(null);
+  const isFirstSnapshot = useRef(true);
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, "incidents"), (snapshot) => {
+      // Ignore the initial bulk load
+      if (isFirstSnapshot.current) {
+        isFirstSnapshot.current = false;
+        return;
+      }
+
+      snapshot.docChanges().forEach((change) => {
+        const data = change.doc.data();
+        if (change.type === "added") {
+          const sourceType = data.source_type ? (data.source_type.charAt(0).toUpperCase() + data.source_type.slice(1).toLowerCase()) : "Unknown";
+          setLiveToast(`JUST NOW: 1 ${data.pollutant_type || "Unknown"} issue was reported by ${sourceType}`);
+        } else if (change.type === "modified") {
+          // If status became RESOLVED
+          if (data.status === "RESOLVED") {
+            const resolvedBy = data.resolved_by ? (data.resolved_by.charAt(0).toUpperCase() + data.resolved_by.slice(1).toLowerCase()) : "Unknown";
+            setLiveToast(`JUST NOW: 1 ${data.pollutant_type || "Unknown"} issue was resolved by ${resolvedBy} just now.`);
+          }
+        }
+      });
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Auto-dismiss live toast after 4 seconds
+  useEffect(() => {
+    if (!liveToast) return;
+    const t = setTimeout(() => setLiveToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [liveToast]);
 
   // Track auth state and check for authority custom claim
   useEffect(() => {
@@ -212,6 +250,51 @@ function App() {
               </button>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* ── Live In-App Toast Overlay (Global) ── */}
+      {liveToast && (
+        <div
+          style={{
+            position: "fixed",
+            top: "76px",
+            right: "24px",
+            zIndex: 9999,
+            background: "var(--surface-2)",
+            color: "var(--text-primary)",
+            border: "1px solid var(--border-strong)",
+            boxShadow: "var(--shadow-lg)",
+            padding: "16px 24px",
+            borderRadius: "var(--r-md)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "16px",
+            fontSize: "15px",
+            fontWeight: 500,
+            pointerEvents: "auto",
+            minWidth: "300px",
+            maxWidth: "400px",
+            animation: "toast-in-right 0.3s var(--ease)"
+          }}
+        >
+          <span>{liveToast}</span>
+          <button
+            onClick={() => setLiveToast(null)}
+            style={{
+              background: "none",
+              border: "none",
+              color: "var(--text-secondary)",
+              cursor: "pointer",
+              padding: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center"
+            }}
+          >
+            <X size={14} />
+          </button>
         </div>
       )}
 

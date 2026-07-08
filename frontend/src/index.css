@@ -1533,35 +1533,37 @@ body {
 
 /* Map error toast */
 .map-toast-error {
-  position: absolute;
-  bottom: var(--s6);
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 1100;
+  position: fixed;
+  top: 100px;
+  right: 24px;
+  z-index: 9999;
   display: flex;
   align-items: center;
-  gap: var(--s3);
-  padding: var(--s3) var(--s4);
+  justify-content: space-between;
+  gap: var(--s4);
+  padding: 16px 24px;
   background: var(--surface-2);
   border: 1px solid var(--status-error-border);
   border-radius: var(--r-md);
-  font-size: 13px;
+  font-size: 15px;
+  font-weight: 500;
   color: #e07070;
   box-shadow: var(--shadow-lg);
-  white-space: nowrap;
-  max-width: calc(100% - 48px);
-  animation: toast-in 0.2s var(--ease);
+  white-space: normal;
+  min-width: 300px;
+  max-width: 400px;
+  animation: toast-in-right 0.3s var(--ease);
 }
 
-@keyframes toast-in {
+@keyframes toast-in-right {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(8px);
+    transform: translateX(20px);
   }
 
   to {
     opacity: 1;
-    transform: translateX(-50%) translateY(0);
+    transform: translateX(0);
   }
 }
 
