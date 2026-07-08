@@ -1513,6 +1513,51 @@ body {
   cursor: not-allowed;
 }
 
+/* Category dropdown filter */
+.category-filter-row {
+  padding: var(--s2) var(--s4);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.category-filter-select {
+  width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 5px 28px 5px 10px;
+  background: var(--surface-2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%239a8e82'/%3E%3C/svg%3E") no-repeat right 10px center;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-sm);
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+  transition: border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.category-filter-select:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.category-filter-select:focus {
+  border-color: var(--green-700);
+  color: var(--text-primary);
+  box-shadow: 0 0 0 2px rgba(34, 168, 90, 0.12);
+}
+
+.category-filter-select option {
+  background: var(--surface-2);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 11px;
+}
+
 /* "Yours" badge inline with incident type */
 .incident-yours-badge {
   display: inline-flex;
@@ -1940,6 +1985,171 @@ body {
 .resolve-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* ============================================================
+   CONFIDENCE CORROBORATION — inside active incident popup
+   ============================================================ */
+
+.confidence-corroboration {
+  margin-top: var(--s2);
+  padding-top: var(--s2);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.confidence-header-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  flex-wrap: wrap;
+}
+
+.confidence-badge {
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--text-secondary);
+  background: var(--surface-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-pill);
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.confidence-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  padding: 2px 4px;
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: var(--r-sm);
+  transition: color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+  line-height: 1.4;
+}
+
+.confidence-toggle-btn:hover {
+  color: var(--text-primary);
+  background: var(--surface-3);
+}
+
+.confidence-chevron {
+  font-size: 10px;
+  display: inline-block;
+  transition: transform var(--dur-fast) var(--ease);
+  line-height: 1;
+}
+
+.confidence-chevron.open {
+  transform: rotate(180deg);
+}
+
+.confidence-detail-panel {
+  margin-top: var(--s2);
+  padding: var(--s2) var(--s3);
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+}
+
+.confidence-station-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  flex-wrap: wrap;
+}
+
+.confidence-station-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+.confidence-distance {
+  font-size: 10px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.confidence-pollutant-list {
+  list-style: none;
+  padding: 0;
+  margin: var(--s1) 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.confidence-pollutant-item {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.confidence-pollutant-name {
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 10px;
+  color: var(--text-secondary);
+  letter-spacing: 0.3px;
+  min-width: 38px;
+}
+
+.confidence-pollutant-reading {
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.confidence-pollutant-reading.elevated {
+  color: var(--amber-400);
+}
+
+.confidence-pollutant-reading.normal {
+  color: var(--green-400);
+}
+
+.confidence-pollutant-threshold {
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+.confidence-pollutant-status {
+  font-size: 10px;
+}
+
+.confidence-pollutant-status.elevated {
+  color: var(--amber-400);
+}
+
+.confidence-pollutant-status.normal {
+  color: var(--green-400);
+}
+
+.confidence-pollutant-age {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  margin-left: 2px;
+}
+
+.confidence-reason-text {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: var(--s1) 0 0;
+  font-style: italic;
 }
 
 /* ============================================================

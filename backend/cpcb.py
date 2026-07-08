@@ -51,13 +51,22 @@ POLLUTANT_ELEVATED_THRESHOLD = {
     "pm10": 100,
 }
 
-AIRBORNE_KEYWORDS = [
-    "smoke", "burn", "burning", "fire", "dust", "emission", "exhaust",
-    "fume", "particulate", "pm2.5", "pm10", "industrial air", "smog",
-    "air pollution", "vehicular", "chimney", "incineration", "gas leak",
-    "air quality", "haze", "smoky", "fuzzy", "blurry", "unclear", "suffocating", 
-    "breathing", "hard to breathe"
-]
+AIRBORNE_CATEGORIES = {
+    "Open Waste Burning / Smoke",
+    "Vehicular Emissions",
+    "Industrial Air Emission",
+    "Construction Dust",
+    "Chemical Fumes / Gas Leak",
+    "Crop / Agricultural Burning",
+}
+
+def is_airborne(pollutant_type: str, summary: str = "") -> bool:
+    """
+    Gate: only airborne/burning-related incidents get cross-checked.
+    Sewage, dumping, etc. skip this entirely.
+    """
+    
+    return pollutant_type in AIRBORNE_CATEGORIES
 
 
 def _to_float(x) -> Optional[float]:
@@ -66,14 +75,6 @@ def _to_float(x) -> Optional[float]:
     except (TypeError, ValueError):
         return None
 
-
-def is_airborne(pollutant_type: str, summary: str = "") -> bool:
-    """
-    Gate: only airborne/burning-related incidents get cross-checked.
-    Sewage, dumping, etc. skip this entirely.
-    """
-    text = f"{pollutant_type or ''} {summary or ''}".lower()
-    return any(kw in text for kw in AIRBORNE_KEYWORDS)
 
 
 def _headers():

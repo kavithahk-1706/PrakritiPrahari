@@ -7,6 +7,25 @@ import { getIdToken, auth } from "./firebase";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
+const POLLUTANT_TYPES = [
+  "Open Waste Burning / Smoke",
+  "Vehicular Emissions",
+  "Industrial Air Emission",
+  "Construction Dust",
+  "Chemical Fumes / Gas Leak",
+  "Crop / Agricultural Burning",
+  "Foul Odor / Unidentified Emission",
+  "Illegal Waste Dumping",
+  "Uncollected Garbage / Overflowing Bins",
+  "Construction & Demolition Debris",
+  "E-Waste / Hazardous Waste",
+  "Sewage / Wastewater Discharge",
+  "Industrial Effluent Discharge",
+  "Water Body Contamination",
+  "Stagnant Water / Mosquito Breeding",
+  "Other",
+];
+
 // severity 1-5 mapped to color - matches the legend and pin fill
 const SEVERITY_COLORS = {
   1: "#4a9d6e",
@@ -72,6 +91,9 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident, isAuthority }) 
 
   // "All" / "Mine" filter toggle
   const [filterMode, setFilterMode] = useState("all");
+
+  // Pollution category filter
+  const [categoryFilter, setCategoryFilter] = useState("all");
 
   // Click-to-recenter: flyTarget changes trigger MapController
   const [flyTarget, setFlyTarget] = useState(null);
@@ -150,12 +172,19 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident, isAuthority }) 
   const allActive = incidents.filter((i) => i.status !== "RESOLVED");
   const allResolved = incidents.filter((i) => i.status === "RESOLVED");
 
-  const activeIncidents = filterMode === "mine" && currentUid
+  const activeByMode = filterMode === "mine" && currentUid
     ? allActive.filter((i) => i.submitted_by_uid === currentUid)
     : allActive;
-  const resolvedIncidents = filterMode === "mine" && currentUid
+  const resolvedByMode = filterMode === "mine" && currentUid
     ? allResolved.filter((i) => i.submitted_by_uid === currentUid)
     : allResolved;
+
+  const activeIncidents = categoryFilter === "all"
+    ? activeByMode
+    : activeByMode.filter((i) => i.pollutant_type === categoryFilter);
+  const resolvedIncidents = categoryFilter === "all"
+    ? resolvedByMode
+    : resolvedByMode.filter((i) => i.pollutant_type === categoryFilter);
 
   // Trigger a fly + popup open from the sidebar list
   function handleSelectIncident(incident) {
@@ -257,6 +286,20 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident, isAuthority }) 
               </button>
             </div>
           )}
+        </div>
+
+        {/* ── Category filter ── */}
+        <div className="category-filter-row">
+          <select
+            className="category-filter-select"
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+          >
+            <option value="all">All categories</option>
+            {POLLUTANT_TYPES.map((type) => (
+              <option key={type} value={type}>{type}</option>
+            ))}
+          </select>
         </div>
 
         {/* ── Error Toast ── */}
@@ -471,6 +514,80 @@ function MapDashboard({ focusedIncidentId, onClearFocusIncident, isAuthority }) 
   );
 }
 
+function ConfidenceCorroboration({ score, basis }) {
+  const [expanded, setExpanded] = useState(false);
+
+  if (score === null || score === undefined) return null;
+
+  const reasonText =
+    basis?.reason === "elevated_corroborated"
+      ? "Nearby sensor confirms elevated pollution"
+      : basis?.reason === "not_elevated"
+      ? "Nearby sensor doesn't currently show elevated readings — uncorroborated, not disproven"
+      : null;
+
+  const pollutants = basis?.pollutants;
+  const hasPollutants = pollutants && Object.keys(pollutants).length > 0;
+  const hasDetails = basis?.station || hasPollutants || reasonText;
+
+  return (
+    <div className="confidence-corroboration">
+      <div className="confidence-header-row">
+        <span className="confidence-badge">Confidence: {score}%</span>
+        {hasDetails && (
+          <button
+            className="confidence-toggle-btn"
+            onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
+            aria-expanded={expanded}
+          >
+            Sensor corroboration
+            <span className={`confidence-chevron ${expanded ? "open" : ""}`}>▾</span>
+          </button>
+        )}
+      </div>
+
+      {expanded && hasDetails && (
+        <div className="confidence-detail-panel">
+          {basis?.station && (
+            <div className="confidence-station-row">
+              <span className="confidence-station-name">{basis.station}</span>
+              {basis.distance_km != null && (
+                <span className="confidence-distance">{basis.distance_km.toFixed(1)} km away</span>
+              )}
+            </div>
+          )}
+
+          {hasPollutants && (
+            <ul className="confidence-pollutant-list">
+              {Object.entries(pollutants).map(([name, data]) => (
+                <li key={name} className="confidence-pollutant-item">
+                  <span className="confidence-pollutant-name">
+                    {name === "pm25" ? "PM2.5" : name === "pm10" ? "PM10" : name.toUpperCase()}
+                  </span>
+                  <span className={`confidence-pollutant-reading ${data.elevated ? "elevated" : "normal"}`}>
+                    {data.value.toFixed(2)} µg/m³
+                  </span>
+                  <span className="confidence-pollutant-threshold">(threshold {data.threshold})</span>
+                  <span className={`confidence-pollutant-status ${data.elevated ? "elevated" : "normal"}`}>
+                    — {data.elevated ? "elevated" : "not elevated"}
+                  </span>
+                  {data.age_hours != null && (
+                    <span className="confidence-pollutant-age">{data.age_hours.toFixed(1)}h ago</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {reasonText && (
+            <p className="confidence-reason-text">{reasonText}</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ActiveIncidentPopupContent({ incident, resolvingId, onResolve, currentUid, isAuthority, onError }) {
   const [isResolving, setIsResolving] = useState(false);
   const [resolveNote, setResolveNote] = useState("");
@@ -500,6 +617,10 @@ function ActiveIncidentPopupContent({ incident, resolvingId, onResolve, currentU
           <Zap size={13} className="popup-action-icon" color="var(--amber-400)" />
           <span className="popup-action-text">{incident.recommended_action}</span>
         </div>
+        <ConfidenceCorroboration
+          score={incident.confidence_score ?? null}
+          basis={incident.confidence_basis ?? null}
+        />
       </div>
 
       <div className="popup-bottom">

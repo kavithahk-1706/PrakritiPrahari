@@ -125,6 +125,8 @@ analysis) into one synthesized summary in plain English.
 
 RETURN INSTRUCTIONS:
 Return summary, pollutant_type, severity_score (1-5), and recommended_action.
+NOTE: pollutant_type must be exactly one of the fixed categories provided in the schema — pick the single closest match, even if the incident involves multiple factors.
+
 
 
 """
@@ -135,7 +137,28 @@ RESPONSE_SCHEMA = {
         "native_transcript": {"type": "STRING", "nullable": True},
         "translated_transcript": {"type": "STRING", "nullable": True},
         "summary": {"type": "STRING"},
-        "pollutant_type": {"type": "STRING"},
+        "pollutant_type": {
+            "type": "STRING",
+            "enum": [
+                "Open Waste Burning / Smoke",
+                "Vehicular Emissions",
+                "Industrial Air Emission",
+                "Construction Dust",
+                "Chemical Fumes / Gas Leak",
+                "Crop / Agricultural Burning",
+                "Foul Odor / Unidentified Emission",
+                "Illegal Waste Dumping",
+                "Uncollected Garbage / Overflowing Bins",
+                "Construction & Demolition Debris",
+                "E-Waste / Hazardous Waste",
+                "Sewage / Wastewater Discharge",
+                "Industrial Effluent Discharge",
+                "Water Body Contamination",
+                "Stagnant Water / Mosquito Breeding",
+                "Other"
+            ],
+        },
+
         "severity_score": {"type": "INTEGER", "minimum": 1, "maximum": 5},
         "recommended_action": {"type": "STRING"},
     },
