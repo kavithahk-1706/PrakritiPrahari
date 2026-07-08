@@ -2577,8 +2577,26 @@ body {
 
 @media (max-width: 480px) {
   .leaflet-popup-content {
-    width: 250px !important;
+    width: calc(100vw - 40px) !important;
+    max-width: 320px !important;
     height: auto !important;
+  }
+  
+  .popup-heading {
+    font-size: 13px !important;
+  }
+  
+  .popup-action-text {
+    font-size: 11px !important;
+  }
+  
+  .popup-badge {
+    font-size: 9px !important;
+    padding: 2px 6px !important;
+  }
+  
+  .popup-pollutant {
+    font-size: 10px !important;
   }
 }
 
